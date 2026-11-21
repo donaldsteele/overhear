@@ -1,0 +1,15 @@
+[package]
+name = "overhear-testgen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pcap-file = { workspace = true }
+pcap = { workspace = true }
+
+[[bin]]
+name = "testgen"
+path = "src/main.rs"
