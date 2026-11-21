@@ -7,4 +7,5 @@ cargo test --workspace -q
 cargo +1.85 check --workspace -q
 cargo check -p overhear-decode -p overhear --target x86_64-pc-windows-msvc -q
 cargo audit
+[ "${SKIP_ARM:-0}" = 1 ] || scripts/arm64-test.sh
 echo "all checks passed"
