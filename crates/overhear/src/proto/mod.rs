@@ -4,6 +4,8 @@ pub mod other;
 
 use overhear_decode::{Packet, Proto};
 
+use crate::json::JsonWriter;
+
 /// Short tag shown in the second column; at most 5 characters.
 pub fn tag(p: &Packet<'_>) -> &'static str {
     match &p.proto {
@@ -15,5 +17,26 @@ pub fn tag(p: &Packet<'_>) -> &'static str {
 pub fn summary(p: &Packet<'_>, out: &mut String) {
     match &p.proto {
         Proto::Other { payload } => other::summary(p, payload.len(), out),
+    }
+}
+
+/// Appends the protocol's verbose lines, each `"  {LABEL:<6}{text}\n"`.
+pub fn verbose(p: &Packet<'_>, frame: &[u8], out: &mut String) {
+    match &p.proto {
+        Proto::Other { payload } => other::verbose(payload.len(), frame, out),
+    }
+}
+
+/// Key of the protocol object written by [`json`].
+pub fn json_name(p: &Packet<'_>) -> &'static str {
+    match &p.proto {
+        Proto::Other { .. } => "other",
+    }
+}
+
+/// Writes the protocol object under the key [`json_name`].
+pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
+    match &p.proto {
+        Proto::Other { payload } => other::json(p, payload.len(), w),
     }
 }

@@ -5,6 +5,7 @@ use std::io::{self, Write};
 
 use overhear_decode::{Decoded, Packet};
 
+use super::hex::hex_dump;
 use super::{Renderer, Summary, TextOpts};
 use crate::proto;
 use crate::source::Frame;
@@ -102,4 +103,7 @@ pub fn format_packet_line(frame: &Frame, decoded: &Decoded<'_>, opts: &TextOpts,
         }
     }
     out.push('\n');
+    if opts.hex {
+        hex_dump(&frame.data, out);
+    }
 }

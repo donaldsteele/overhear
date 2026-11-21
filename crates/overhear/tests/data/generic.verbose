@@ -1,0 +1,57 @@
+2026-11-21 13:02:11.000  60 bytes
+  ETH   02:00:5e:10:00:05 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  10.0.0.5 → 255.255.255.255  ttl 64 proto 17
+  UDP   12345 → 9  len 13
+  DATA  5 bytes
+
+2026-11-21 13:02:11.250  70 bytes
+  ETH   02:00:5e:10:00:06 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::200:5eff:fe10:6 → ff02::1  hop limit 255 next 17
+  UDP   5000 → 9999  len 16
+  DATA  8 bytes
+
+2026-11-21 13:02:11.500  60 bytes
+  ETH   02:00:5e:10:00:07 → 01:00:5e:7f:00:01  type 0x88e1
+  DATA  46 bytes
+
+2026-11-21 13:02:11.750  60 bytes
+  ETH   02:00:5e:10:00:05 → ff:ff:ff:ff:ff:ff  type 0x0800
+  VLAN  C 100 pcp 0
+  IPv4  10.0.0.5 → 255.255.255.255  ttl 64 proto 17
+  UDP   12345 → 9  len 13
+  DATA  5 bytes
+
+2026-11-21 13:02:12.000  60 bytes
+  ETH   02:00:5e:10:00:05 → ff:ff:ff:ff:ff:ff  type 0x0800
+  VLAN  S 200 pcp 0
+  VLAN  C 100 pcp 0
+  IPv4  10.0.0.5 → 255.255.255.255  ttl 64 proto 17
+  UDP   12345 → 9  len 13
+  DATA  5 bytes
+
+2026-11-21 13:02:12.250  13 bytes
+  !     ethernet: truncated at 0: ffffffffffffffffffffffffff
+
+2026-11-21 13:02:12.500  60 bytes
+  ETH   02:00:5e:10:00:05 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  10.0.0.5 → 255.255.255.255  ttl 64 proto 17  later fragment
+  DATA  13 bytes
+
+2026-11-21 13:02:12.750  60 bytes
+  ETH   02:00:5e:10:00:08 → 01:80:c2:00:00:14  llc dsap 0xfe ssap 0xfe ctrl 0x03
+  DATA  4 bytes
+
+2026-11-21 13:02:13.000  400 bytes, 60 captured
+  ETH   02:00:5e:10:00:05 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  10.0.0.5 → 255.255.255.255  ttl 64 proto 17
+  UDP   12345 → 9  len 366
+  DATA  18 bytes
+  !     ipv4: truncated at 16: 0182
+  !     udp: truncated at 38: 016e
+
+2026-11-21 13:02:13.250  62 bytes
+  ETH   02:00:5e:10:00:0a → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::200:5eff:fe10:a → ff02::1  hop limit 64 next 58
+  ICMP6 type 128 code 0
+  DATA  4 bytes
+
