@@ -81,9 +81,6 @@ fn generic() -> Vec<TFrame> {
     );
     let mut cut = eth_ipv4(BCAST, mac(5), &big);
     cut.truncate(60);
-    // Keep the IPv4 total length consistent with the cut frame so that only the
-    // UDP length overruns the data (one problem, not two).
-    cut[16..18].copy_from_slice(&46u16.to_be_bytes());
     f.push((cut, Some(400)));
     let icmp = ipv6_icmp(link_local(10), all_nodes(), 64, &[128, 0, 0, 0, 0, 1, 0, 1]);
     f.push((eth_ipv6(ALL_NODES_MAC, mac(10), &icmp), None));

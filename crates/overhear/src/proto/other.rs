@@ -1,6 +1,7 @@
 //! Packets no protocol decoder claimed.
 
 use std::fmt::Write;
+use std::net::IpAddr;
 
 use overhear_decode::{EthKind, Frag, IpHeader, L4, Packet};
 
@@ -41,7 +42,11 @@ pub fn summary(p: &Packet<'_>, n: usize, out: &mut String) {
             } else {
                 match (p.l4, ip) {
                     (L4::Udp(u), _) => {
-                        write!(out, "UDP {} → {dst}:{} ({n} bytes)", u.src_port, u.dst_port)
+                        let hp = match dst {
+                            IpAddr::V4(a) => format!("{a}:{}", u.dst_port),
+                            IpAddr::V6(a) => format!("[{a}]:{}", u.dst_port),
+                        };
+                        write!(out, "UDP {} → {hp} ({n} bytes)", u.src_port)
                     }
                     (L4::Icmpv6 { typ, code }, _) => {
                         write!(out, "type {typ} code {code} → {dst}")
