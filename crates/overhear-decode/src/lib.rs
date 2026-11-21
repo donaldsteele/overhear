@@ -12,9 +12,11 @@
 //! Pure, never-panic packet decoders.
 
 mod cursor;
+mod ether;
 mod mac;
 mod problem;
 
 pub use cursor::Cursor;
+pub use ether::{EthHeader, EthKind, Vlan, Vlans, ethernet};
 pub use mac::Mac;
 pub use problem::{Layer, Problem};
