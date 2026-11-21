@@ -1,1 +1,20 @@
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::arithmetic_side_effects
+)]
 
+//! Pure, never-panic packet decoders.
+
+mod cursor;
+mod mac;
+mod problem;
+
+pub use cursor::Cursor;
+pub use mac::Mac;
+pub use problem::{Layer, Problem};
