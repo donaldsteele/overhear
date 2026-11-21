@@ -1,7 +1,10 @@
+pub mod cli;
 pub mod engine;
 pub mod escape;
 pub mod file_source;
+pub mod filter;
 pub mod json;
+pub mod platform;
 pub mod proto;
 pub mod render;
 pub mod source;

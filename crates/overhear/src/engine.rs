@@ -36,6 +36,7 @@ impl Engine {
     }
 }
 
+#[derive(Debug)]
 pub enum RunEnd {
     Done,
     /// Stdout went away (BrokenPipe).
@@ -71,3 +72,14 @@ pub fn run_source(
         }
     }
 }
+
+impl std::fmt::Display for RunError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunError::Source(e) => write!(f, "{e}"),
+            RunError::Io(e) => write!(f, "write error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for RunError {}
