@@ -30,9 +30,10 @@ fn io_err(e: pcap_file::PcapError) -> io::Error {
     io::Error::other(e.to_string())
 }
 
-fn pcap_to<W: Write>(out: W, linktype: u32, frames: &[TFrame]) -> io::Result<W> {
+fn pcap_to<W: Write>(out: W, linktype: u32, snaplen: u32, frames: &[TFrame]) -> io::Result<W> {
     let header = PcapHeader {
         datalink: DataLink::from(linktype),
+        snaplen,
         ..Default::default()
     };
     let mut w = PcapWriter::with_header(out, header).map_err(io_err)?;
@@ -53,26 +54,47 @@ pub fn write_pcap_linktype(path: &Path, linktype: u32, frames: &[TFrame]) -> io:
     fs::write(path, pcap_bytes_linktype(linktype, frames))
 }
 
+/// Ethernet pcap whose global header carries `snaplen` (frames may have a larger `orig_len`).
+pub fn write_pcap_snaplen(path: &Path, snaplen: u32, frames: &[TFrame]) -> io::Result<()> {
+    fs::write(path, pcap_bytes_snaplen(1, snaplen, frames))
+}
+
 pub fn pcap_bytes(frames: &[TFrame]) -> Vec<u8> {
     pcap_bytes_linktype(1, frames)
 }
 
 fn pcap_bytes_linktype(linktype: u32, frames: &[TFrame]) -> Vec<u8> {
+    pcap_bytes_snaplen(linktype, 65535, frames)
+}
+
+fn pcap_bytes_snaplen(linktype: u32, snaplen: u32, frames: &[TFrame]) -> Vec<u8> {
     // Writing into a Vec only fails for frames beyond the snaplen.
-    pcap_to(Vec::new(), linktype, frames).expect("frames fit pcap limits")
+    pcap_to(Vec::new(), linktype, snaplen, frames).expect("frames fit pcap limits")
 }
 
 /// Ethernet, default (microsecond) timestamp resolution.
 pub fn write_pcapng(path: &Path, frames: &[TFrame]) -> io::Result<()> {
+    let tagged: Vec<(u32, TFrame)> = frames.iter().map(|f| (0, f.clone())).collect();
+    write_pcapng_interfaces(path, 1, &tagged)
+}
+
+/// pcapng with `n_ifaces` Ethernet interfaces; each frame is tagged with its interface id.
+pub fn write_pcapng_interfaces(
+    path: &Path,
+    n_ifaces: u32,
+    frames: &[(u32, TFrame)],
+) -> io::Result<()> {
     let mut w = PcapNgWriter::new(Vec::new()).map_err(io_err)?;
-    w.write_pcapng_block(InterfaceDescriptionBlock::new(DataLink::ETHERNET, 65535))
-        .map_err(io_err)?;
-    for f in frames {
+    for _ in 0..n_ifaces {
+        w.write_pcapng_block(InterfaceDescriptionBlock::new(DataLink::ETHERNET, 65535))
+            .map_err(io_err)?;
+    }
+    for (iface, f) in frames {
         // pcap-file writes the Duration as raw ticks (nanoseconds field = ticks),
         // and the default if_tsresol is microseconds.
         let ticks = f.sec as u64 * 1_000_000 + u64::from(f.usec);
         let epb = EnhancedPacketBlock {
-            interface_id: 0,
+            interface_id: *iface,
             timestamp: Duration::from_nanos(ticks),
             original_len: f.orig(),
             data: f.data.as_slice().into(),
