@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use jiff::tz::TimeZone;
 use overhear_decode::{Decoded, Frag, IpHeader, Mac, Packet, Problem};
 
-use super::{Renderer, Summary, problem_bytes, vlan_kind};
+use super::{Renderer, Summary, vlan_kind};
 use crate::json::JsonWriter;
 use crate::proto;
 use crate::source::Frame;
@@ -48,7 +48,7 @@ fn problems(w: &mut JsonWriter, list: &[Problem], frame: &[u8]) {
         w.str(Some("layer"), p.layer.as_str());
         w.str(Some("reason"), p.reason);
         w.u64(Some("offset"), u64::try_from(p.offset).unwrap_or(u64::MAX));
-        w.hex(Some("hex"), problem_bytes(p, frame).0);
+        w.hex(Some("hex"), p.bytes(frame));
         w.end();
     }
     w.end();
