@@ -263,6 +263,31 @@ mod tests {
             };
             tr.apply(Segment::UNTAGGED, ts(0), &[o], &mut out);
         }
+        // Two hosts answering each of many distinct long names, and one host
+        // answering for many distinct long names.
+        let long = |i: u32, tag: u8| {
+            let mut n = vec![tag; 250];
+            n.extend_from_slice(&i.to_be_bytes());
+            n
+        };
+        for i in 0..5000u32 {
+            for m in [1u8, 2] {
+                let o = Observation::NameAnswer {
+                    mac: Mac([0x02, 0, 0, 0, 0, m]),
+                    kind: AnswerKind::Netbios,
+                    name: long(i, b'a').into(),
+                    data: vec![m].into(),
+                };
+                tr.apply(Segment::UNTAGGED, ts(i64::from(i)), &[o], &mut out);
+            }
+            let o = Observation::NameAnswer {
+                mac: Mac([0x02, 0, 0, 0, 0, 3]),
+                kind: AnswerKind::Llmnr,
+                name: long(i, b'b').into(),
+                data: vec![3].into(),
+            };
+            tr.apply(Segment::UNTAGGED, ts(i64::from(i)), &[o], &mut out);
+        }
         assert!(tr.budget.used() <= 4 << 20, "{}", tr.budget.used());
         assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
         assert_eq!(tr.table.len(), 100);

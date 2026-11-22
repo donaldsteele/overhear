@@ -8,7 +8,7 @@ use overhear_decode::Mac;
 use super::index::Index;
 use super::lru::Lru;
 use super::{OVERHEAD, Output, Rule, Severity, Warning};
-use crate::escape::{TextKind, push_text};
+use crate::escape::{LINE_FIELD_MAX, TextKind, push_text};
 use crate::observe::{AnswerKind, Observation, Segment, Ts};
 use crate::track::{Budget, MAX_STR};
 
@@ -45,15 +45,22 @@ pub(super) struct Names {
     pub(super) hosts: Lru<HostKey, NameSet>,
 }
 
+/// Seconds since `then`; a stamp from the future (the clock stepped back)
+/// counts as now, so it can not stretch a window.
+fn age(now: i64, then: i64) -> i64 {
+    now.saturating_sub(then).max(0)
+}
+
 fn fnv1a(data: &[u8]) -> u64 {
     data.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
         (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
     })
 }
 
+/// A name for a message, cut at [`LINE_FIELD_MAX`] characters.
 fn escaped(bytes: &[u8]) -> String {
     let mut s = String::new();
-    push_text(&mut s, bytes, TextKind::Utf8, usize::MAX);
+    push_text(&mut s, bytes, TextKind::Utf8, LINE_FIELD_MAX);
     s
 }
 
@@ -98,7 +105,7 @@ impl Names {
             .answers
             .get(&key)
             .copied()
-            .filter(|(m, h, t)| *m != mac && *h != hash && ts.sec.saturating_sub(*t) <= WINDOW)
+            .filter(|(m, h, t)| *m != mac && *h != hash && age(ts.sec, *t) <= WINDOW)
             .map(|(old, _, _)| {
                 let shown = escaped(&key.2);
                 Output::Warning(Warning {
@@ -147,7 +154,10 @@ impl Names {
         let (seg, mac) = hk;
         let limit = budget.limit() / super::SHARE;
         let mut set = self.hosts.remove(&hk, budget).unwrap_or_default();
-        set.retain(|(_, t)| ts.sec.saturating_sub(*t) <= WINDOW);
+        for (_, t) in &mut set {
+            *t = (*t).min(ts.sec);
+        }
+        set.retain(|(_, t)| age(ts.sec, *t) <= WINDOW);
         let known = set.iter().position(|(n, _)| *n == name);
         if let Some(i) = known {
             set.remove(i);

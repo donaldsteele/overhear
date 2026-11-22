@@ -1263,6 +1263,28 @@ mod tests {
     }
 
     #[test]
+    fn long_names_are_cut_in_warnings() {
+        let mut r = Rig::new(Pins::default());
+        let long = vec![b'x'; 255];
+        r.see(U, 0, &answer(1, AnswerKind::Llmnr, &long, &[1]));
+        let out = r.see(U, 1, &answer(2, AnswerKind::Llmnr, &long, &[2]));
+        let w = only_warning(&out);
+        assert!(w.subject.len() < 100 && w.message.len() < 200, "{w:?}");
+    }
+
+    #[test]
+    fn clock_step_back_does_not_stretch_windows() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Llmnr;
+        // Names stamped far in the future, then the clock steps back: they
+        // count from the step back, so by t = 401 all of them have expired.
+        r.see(U, 20_000, &answer(7, k, b"a", &[1]));
+        r.see(U, 20_000, &answer(7, k, b"b", &[1]));
+        r.see(U, 100, &answer(7, k, b"c", &[1]));
+        assert_eq!(r.see(U, 401, &answer(7, k, b"d", &[1])), []);
+    }
+
+    #[test]
     fn mdns_unique_not_counted_for_pattern() {
         let mut r = Rig::new(Pins::default());
         for (i, n) in [&b"a"[..], b"b", b"c", b"d"].into_iter().enumerate() {

@@ -69,6 +69,8 @@ pub(super) struct Repeats {
     /// Every key by [`Age`], the next to replace first.
     order: BTreeMap<Age, Key>,
     clock: u64,
+    /// Sum of the entry costs.
+    bytes: usize,
 }
 
 impl Repeats {
@@ -77,6 +79,7 @@ impl Repeats {
             keys: BTreeMap::new(),
             order: BTreeMap::new(),
             clock: 0,
+            bytes: 0,
         }
     }
 
@@ -88,9 +91,6 @@ impl Repeats {
         let stamp = self.clock;
         let key = (w.rule, w.severity, w.segment, w.subject.clone());
         let Some(e) = self.keys.get_mut(&key) else {
-            if self.keys.len() >= MAX_REPEAT_KEYS {
-                self.replace_oldest(budget);
-            }
             let e = Entry {
                 stamp,
                 last_report: now,
@@ -98,7 +98,15 @@ impl Repeats {
                 pending: 0,
                 latest: None,
             };
-            budget.adjust(0, entry_cost(&key, &e));
+            let cost = entry_cost(&key, &e);
+            let share = budget.limit() / super::SHARE;
+            while !self.keys.is_empty()
+                && (self.keys.len() >= MAX_REPEAT_KEYS || self.bytes.saturating_add(cost) > share)
+            {
+                self.replace_oldest(budget);
+            }
+            self.bytes = self.bytes.saturating_add(cost);
+            budget.adjust(0, cost);
             self.order.insert(e.age(), key.clone());
             self.keys.insert(key, e);
             out.push(Output::Warning(w));
@@ -120,7 +128,9 @@ impl Repeats {
             e.last_report = now;
             out.push(Output::Warning(Warning { count, ..w }));
         }
-        budget.adjust(before, entry_cost(&key, e));
+        let after = entry_cost(&key, e);
+        self.bytes = self.bytes.saturating_sub(before).saturating_add(after);
+        budget.adjust(before, after);
         self.order.insert(e.age(), key);
     }
 
@@ -129,7 +139,9 @@ impl Repeats {
             return;
         };
         if let Some(e) = self.keys.remove(&key) {
-            budget.adjust(entry_cost(&key, &e), 0);
+            let c = entry_cost(&key, &e);
+            self.bytes = self.bytes.saturating_sub(c);
+            budget.adjust(c, 0);
         }
     }
 
@@ -146,6 +158,7 @@ impl Repeats {
 
     fn sweep(&mut self, now: Ts, all: bool, budget: &mut Budget, out: &mut Vec<Output>) {
         let order = &mut self.order;
+        let mut bytes = self.bytes;
         self.keys.retain(|key, e| {
             let before = entry_cost(key, e);
             let age = e.age();
@@ -167,9 +180,12 @@ impl Repeats {
             if keep && e.age() != age {
                 order.insert(e.age(), key.clone());
             }
-            budget.adjust(before, if keep { entry_cost(key, e) } else { 0 });
+            let after = if keep { entry_cost(key, e) } else { 0 };
+            bytes = bytes.saturating_sub(before).saturating_add(after);
+            budget.adjust(before, after);
             keep
         });
+        self.bytes = bytes;
     }
 
     #[cfg(test)]
