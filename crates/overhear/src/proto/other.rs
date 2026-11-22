@@ -6,6 +6,7 @@ use std::net::IpAddr;
 use overhear_decode::{EthKind, Frag, IpHeader, L4, Packet};
 
 use crate::json::JsonWriter;
+use crate::observe::{Observation, ProtoTag};
 
 pub fn tag(p: &Packet<'_>) -> &'static str {
     match p.ip {
@@ -78,6 +79,26 @@ pub fn summary(p: &Packet<'_>, n: usize, out: &mut String) {
 
 pub fn verbose(n: usize, _frame: &[u8], out: &mut String) {
     let _ = writeln!(out, "  DATA  {n} bytes");
+}
+
+/// The sender was heard; its address is learned only from group-addressed
+/// packets, where the source IP is the sender's own.
+pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
+    let mac = p.eth.src;
+    out.push(Observation::Heard {
+        mac,
+        proto: ProtoTag::Other,
+    });
+    if let Some(ip) = p.ip {
+        let (src, dst) = (ip.src(), ip.dst());
+        let group_dst = match dst {
+            IpAddr::V4(a) => a.is_broadcast() || a.is_multicast(),
+            IpAddr::V6(a) => a.is_multicast(),
+        };
+        if !src.is_unspecified() && (group_dst || p.eth.dst.is_multicast()) {
+            out.push(Observation::Address { mac, ip: src });
+        }
+    }
 }
 
 pub fn json(p: &Packet<'_>, n: usize, w: &mut JsonWriter) {

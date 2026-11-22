@@ -5,6 +5,7 @@ pub mod other;
 use overhear_decode::{Packet, Proto};
 
 use crate::json::JsonWriter;
+use crate::observe::Observation;
 
 /// Short tag shown in the second column; at most 5 characters.
 pub fn tag(p: &Packet<'_>) -> &'static str {
@@ -38,5 +39,12 @@ pub fn json_name(p: &Packet<'_>) -> &'static str {
 pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
     match &p.proto {
         Proto::Other { payload } => other::json(p, payload.len(), w),
+    }
+}
+
+/// Appends the facts the packet reveals. `Heard` always comes first.
+pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
+    match &p.proto {
+        Proto::Other { .. } => other::observe(p, out),
     }
 }

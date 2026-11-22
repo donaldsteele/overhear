@@ -4,11 +4,25 @@ use std::io;
 
 use overhear_decode::decode;
 
+use crate::observe::{Observation, Segment, Ts};
+use crate::proto::observe;
 use crate::render::{Renderer, Status, Summary, TextOpts};
 use crate::source::{Frame, Next, Source, SourceError, SourceStats};
+use crate::track::Tracker;
+
+/// Empties `v` and hands back its allocation under another lifetime.
+fn reuse<'a, 'b>(mut v: Vec<Observation<'a>>) -> Vec<Observation<'b>> {
+    v.clear();
+    // Collecting from the same-layout iterator reuses the allocation.
+    #[allow(clippy::unnecessary_filter_map)]
+    let out = v.into_iter().filter_map(|_| None).collect();
+    out
+}
 
 pub struct Config {
     pub text: TextOpts,
+    /// Budget for everything remembered about the network, in bytes.
+    pub max_memory: usize,
 }
 
 pub struct Engine {
@@ -18,11 +32,16 @@ pub struct Engine {
     /// Kernel plus interface drops at the last `stats` call.
     kernel_drops: u64,
     channel_drops: u64,
+    tracker: Tracker,
+    /// Observations of the frame being handled; always empty between frames.
+    scratch: Vec<Observation<'static>>,
 }
 
 impl Engine {
     pub fn new(cfg: Config) -> Engine {
         Engine {
+            tracker: Tracker::new(cfg.max_memory),
+            scratch: Vec::new(),
             cfg,
             packets: 0,
             kernel_drops: 0,
@@ -33,7 +52,22 @@ impl Engine {
     pub fn frame(&mut self, f: &Frame, r: &mut dyn Renderer) -> io::Result<()> {
         self.packets = self.packets.saturating_add(1);
         let decoded = decode(&f.data);
+        if let Ok(p) = &decoded {
+            let mut obs = reuse(std::mem::take(&mut self.scratch));
+            observe(p, &mut obs);
+            let ts = Ts {
+                sec: f.ts_sec,
+                usec: f.ts_usec,
+            };
+            self.tracker
+                .apply(Segment::from_vlans(&p.eth.vlans), ts, &obs);
+            self.scratch = reuse(obs);
+        }
         r.packet(f, &decoded)
+    }
+
+    pub fn tracker(&self) -> &Tracker {
+        &self.tracker
     }
 
     /// Takes the capture's running drop counters (the source's and the
@@ -57,7 +91,7 @@ impl Engine {
             ts: now,
             kernel_drops,
             channel_drops,
-            evictions: 0,
+            evictions: self.tracker.table.evictions(),
         })
     }
 
@@ -73,7 +107,8 @@ impl Engine {
             packets: self.packets,
             kernel_drops: self.kernel_drops,
             channel_drops: self.channel_drops,
-            ..Summary::default()
+            devices: self.tracker.table.len(),
+            evictions: self.tracker.table.evictions(),
         }
     }
 }
@@ -155,6 +190,7 @@ mod tests {
                 style: TimeStyle::DateTime,
                 hex: false,
             },
+            max_memory: 1 << 20,
         })
     }
 
@@ -165,6 +201,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn frames_feed_the_device_table() {
+        let mut e = engine();
+        let mut r = Statuses::default();
+        // Ethernet header + 4 bytes of an unclaimed ethertype, from two MACs.
+        for src in [1u8, 2, 1] {
+            let mut data = vec![0xff; 6];
+            data.extend_from_slice(&[0, 0x16, 0, 0, 0, src]);
+            data.extend_from_slice(&[0x88, 0xb5, 0, 0, 0, 0]);
+            let f = Frame {
+                data,
+                ..Frame::default()
+            };
+            e.frame(&f, &mut r).expect("frame");
+        }
+        let s = e.summary();
+        assert_eq!((s.devices, s.evictions), (2, 0));
+        assert_eq!(e.tracker().budget.used(), e.tracker().table.recount());
+    }
     #[test]
     fn stats_render_a_status_only_when_drops_grow() {
         let mut e = engine();

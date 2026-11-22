@@ -26,7 +26,10 @@ fn opts() -> TextOpts {
 
 fn run(name: &str, r: &mut dyn Renderer) {
     let mut src = FileSource::open(&data(&format!("{name}.pcap"))).expect("open pcap");
-    let mut engine = Engine::new(Config { text: opts() });
+    let mut engine = Engine::new(Config {
+        text: opts(),
+        max_memory: 1 << 20,
+    });
     let end = run_source(&mut src, &mut engine, r).expect("run");
     assert!(matches!(end, RunEnd::Done));
     r.finish(&engine.summary()).expect("finish");

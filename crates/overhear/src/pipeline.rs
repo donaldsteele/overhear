@@ -233,6 +233,18 @@ impl Capture {
     }
 }
 
+/// A buffer that grew past this many times the starting capacity (a 64 KiB
+/// loopback frame) is replaced when it returns to the pool, so the pool as a
+/// whole stays near its nominal size.
+const MAX_KEPT_FACTOR: usize = 4;
+
+fn trim_frame(mut f: Frame) -> Frame {
+    if f.data.capacity() > MAX_KEPT_FACTOR * FRAME_CAPACITY {
+        f.data = Vec::with_capacity(FRAME_CAPACITY);
+    }
+    f
+}
+
 fn new_frame() -> Frame {
     Frame {
         data: Vec::with_capacity(FRAME_CAPACITY),
@@ -340,7 +352,7 @@ impl Main {
                 let done = self.frame(&f, engine, r);
                 // Fails only when the capture thread is gone; then the buffer
                 // is just freed.
-                let _ = self.free.send(f);
+                let _ = self.free.send(trim_frame(f));
                 done.err().map(io_end)
             }
             Msg::Tick => None,
@@ -408,6 +420,25 @@ mod tests {
     use crate::render::{Status, TextOpts};
     use crate::source::{Frame, LinkType, Next, SourceError, SourceStats};
     use crate::time::TimeStyle;
+
+    #[test]
+    fn oversized_buffers_are_replaced_when_returned() {
+        let mut big = new_frame();
+        big.data.resize(64 * 1024, 7);
+        big.ts_sec = 9;
+        let back = trim_frame(big);
+        assert!(back.data.is_empty() && back.data.capacity() <= MAX_KEPT_FACTOR * FRAME_CAPACITY);
+        assert!(back.data.capacity() >= FRAME_CAPACITY);
+
+        let mut ok = new_frame();
+        ok.data.resize(MAX_KEPT_FACTOR * FRAME_CAPACITY, 1);
+        let kept = trim_frame(ok);
+        assert_eq!(
+            kept.data.len(),
+            MAX_KEPT_FACTOR * FRAME_CAPACITY,
+            "kept as is"
+        );
+    }
 
     #[derive(Clone, Copy)]
     enum Step {
@@ -557,6 +588,7 @@ mod tests {
                 style: TimeStyle::DateTime,
                 hex: false,
             },
+            max_memory: 1 << 20,
         })
     }
 

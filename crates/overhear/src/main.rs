@@ -88,7 +88,10 @@ fn main() -> ExitCode {
         },
         hex: args.hex,
     };
-    let mut engine = Engine::new(Config { text: text.clone() });
+    let mut engine = Engine::new(Config {
+        text: text.clone(),
+        max_memory: args.max_memory,
+    });
     // Packets must reach a terminal or pipe at once; a regular file can wait.
     let out = BufWriter::new(io::stdout());
     let flush = !platform::stdout_is_file();
