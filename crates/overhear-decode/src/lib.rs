@@ -13,6 +13,8 @@
 
 mod arp;
 mod cursor;
+mod dhcp;
+pub mod dhcp_opts;
 mod ether;
 mod ip;
 mod mac;
@@ -21,6 +23,7 @@ mod problem;
 
 pub use arp::{Arp, ArpKind, parse as parse_arp};
 pub use cursor::Cursor;
+pub use dhcp::{Dhcp, DhcpOption, OptSource, parse as parse_dhcp};
 pub use ether::{EthHeader, EthKind, Vlan, Vlans, ethernet};
 pub use ip::{Frag, IpHeader, Ipv4Header, Ipv6Header};
 pub use mac::Mac;

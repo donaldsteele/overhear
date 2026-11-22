@@ -1,5 +1,5 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
-use crate::{Arp, Cursor, EthHeader, EthKind, Layer, Problem, arp, ethernet};
+use crate::{Arp, Cursor, Dhcp, EthHeader, EthKind, Layer, Problem, arp, dhcp, ethernet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdpHeader {
@@ -18,6 +18,7 @@ pub enum L4 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Proto<'a> {
     Arp(Arp),
+    Dhcp(Dhcp<'a>),
     Other { payload: &'a [u8] },
 }
 
@@ -44,12 +45,18 @@ fn dispatch_ether<'a>(
 }
 
 fn dispatch_udp<'a>(
-    _ip: &IpHeader,
-    _udp: &UdpHeader,
-    _c: &mut Cursor<'a>,
-    _problems: &mut Vec<Problem>,
+    ip: &IpHeader,
+    udp: &UdpHeader,
+    c: &mut Cursor<'a>,
+    problems: &mut Vec<Problem>,
 ) -> Option<Proto<'a>> {
-    None
+    let bootp = |p: u16| matches!(p, 67 | 68);
+    match ip {
+        IpHeader::V4(_) if bootp(udp.src_port) || bootp(udp.dst_port) => {
+            dhcp::parse(c, problems).map(Proto::Dhcp)
+        }
+        _ => None,
+    }
 }
 
 fn dispatch_icmpv6<'a>(
@@ -348,7 +355,7 @@ mod tests {
         assert!(p.ip.is_none());
         match p.proto {
             Proto::Other { payload } => assert_eq!(payload.len(), 46),
-            Proto::Arp(_) => panic!("not other"),
+            _ => panic!("not other"),
         }
     }
 
@@ -368,5 +375,48 @@ mod tests {
             vec![(Layer::Arp, "unsupported hardware or protocol size")]
         );
         assert!(matches!(p.proto, Proto::Other { payload } if payload.len() == 46));
+    }
+
+    fn dhcp_frame(sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
+        eth_ipv4(
+            BCAST,
+            mac(5),
+            &ipv4_udp(
+                v4(0, 0, 0, 0),
+                v4(255, 255, 255, 255),
+                sport,
+                dport,
+                payload,
+            ),
+        )
+    }
+
+    #[test]
+    fn dhcp_dispatch_on_ports_67_and_68() {
+        let b = DhcpMsg::discover(mac(5), "h").bytes();
+        for (s, d) in [(68, 67), (67, 68)] {
+            let f = dhcp_frame(s, d, &b);
+            let p = decode(&f).unwrap();
+            assert!(matches!(&p.proto, Proto::Dhcp(x) if x.msg_type() == Some(1)));
+            assert!(p.problems.is_empty());
+        }
+        let f = dhcp_frame(1000, 2000, &b);
+        assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
+    }
+
+    #[test]
+    fn dhcp_short_payload_falls_back_to_other() {
+        let f = dhcp_frame(68, 67, &[0; 100]);
+        let p = decode(&f).unwrap();
+        assert_eq!(prob(&p), vec![(Layer::Dhcp, "truncated BOOTP header")]);
+        assert!(matches!(p.proto, Proto::Other { payload } if payload.len() == 100));
+    }
+
+    #[test]
+    fn dhcp_ports_over_ipv6_are_other() {
+        let b = DhcpMsg::discover(mac(5), "h").bytes();
+        let ip = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 68, 67, &b);
+        let f = eth_ipv6(mac(1), mac(2), &ip);
+        assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
     }
 }
