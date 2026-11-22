@@ -88,6 +88,11 @@ impl Engine {
         &self.tracker
     }
 
+    #[cfg(test)]
+    pub(crate) fn tracker_mut(&mut self) -> &mut Tracker {
+        &mut self.tracker
+    }
+
     /// Takes the capture's running drop counters (the source's and the
     /// pipeline's) and renders a [`Status`] when either has grown since the
     /// last call. `now` is in seconds since the epoch.
@@ -118,6 +123,13 @@ impl Engine {
     /// the warning summaries that are due.
     pub fn tick(&mut self, now: i64, r: &mut dyn Renderer) -> io::Result<()> {
         self.tracker.tick(now, &mut self.outputs);
+        self.render_outputs(r)
+    }
+
+    /// At the end of a run (seconds since the epoch): renders every pending
+    /// warning summary, due or not.
+    pub fn flush(&mut self, now: i64, r: &mut dyn Renderer) -> io::Result<()> {
+        self.tracker.flush(now, &mut self.outputs);
         self.render_outputs(r)
     }
 

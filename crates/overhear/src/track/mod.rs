@@ -64,6 +64,12 @@ impl Tracker {
         let now = Ts { sec: now, usec: 0 };
         self.warn.tick(now, &mut self.budget, out);
     }
+
+    /// At the end of a run: outputs every pending repeat summary.
+    pub fn flush(&mut self, now: i64, out: &mut Vec<Output>) {
+        let now = Ts { sec: now, usec: 0 };
+        self.warn.flush(now, &mut self.budget, out);
+    }
 }
 
 #[cfg(test)]
@@ -115,5 +121,47 @@ mod tests {
         assert!(tr.budget.used() <= 64 * 1024);
         assert!(tr.table.get(&server).is_some(), "pinned server evicted");
         assert_eq!(out, []);
+    }
+
+    #[test]
+    fn distinct_subject_flood_is_bounded() {
+        let pins = Pins {
+            dhcp: vec![(Ipv4Addr::new(10, 0, 0, 1), None)],
+            ..Pins::default()
+        };
+        let mut tr = Tracker::new(4 << 20, pins);
+        let mut out = Vec::new();
+        for i in 0..100u8 {
+            let m = Mac([0x00, 0x16, 0xfe, 0, 0, i]);
+            tr.apply(Segment::UNTAGGED, ts(0), &[heard(m)], &mut out);
+        }
+        // Forged replies, each naming a new server id.
+        for i in 0..100_000u32 {
+            let reply = Observation::DhcpReply {
+                client: Mac([0x00, 0x16, 0xfe, 0, 0, 1]),
+                server_mac: Mac([0x02, 0x16, 0xfe, 0, 0, 1]),
+                server_id: Ipv4Addr::from(0x0b00_0000 + i),
+                msg_type: 2,
+                router: None,
+            };
+            tr.apply(
+                Segment::UNTAGGED,
+                ts(i64::from(i / 1000)),
+                &[reply],
+                &mut out,
+            );
+            if i % 997 == 0 {
+                assert_eq!(
+                    tr.budget.used(),
+                    tr.table.recount() + tr.warn.cost(),
+                    "after {i}"
+                );
+            }
+        }
+        assert_eq!(out.len(), 100_000);
+        assert!(tr.warn.repeat_keys() <= 4096);
+        assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
+        assert_eq!(tr.table.len(), 100, "devices evicted");
+        assert_eq!(tr.table.evictions(), 0);
     }
 }

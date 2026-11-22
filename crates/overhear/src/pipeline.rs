@@ -67,7 +67,9 @@ enum Msg {
 /// outside (a signal handler) ends the run once the frames already captured
 /// are rendered. Every exit path stops and joins the capture thread, using
 /// the source's waker (if it has one) to cut short a read blocked on a quiet
-/// interface. The caller calls `Renderer::finish`.
+/// interface. A run that ends normally renders the pending warning summaries
+/// ([`Engine::flush`]) before it returns. The caller calls
+/// `Renderer::finish`.
 pub fn run_threaded(
     mut src: Box<dyn Source>,
     engine: &mut Engine,
@@ -104,7 +106,10 @@ pub fn run_threaded(
         waker,
         stopping: false,
     };
-    let end = main.run(engine, r, hook);
+    let end = match main.run(engine, r, hook) {
+        Ok(RunEnd::Done) => main.flush(engine, r),
+        end => end,
+    };
     if !main.capture_done {
         main.stop_capture();
     }
@@ -379,6 +384,20 @@ impl Main {
         }
     }
 
+    /// The run ended normally: renders the pending warning summaries, at
+    /// the engine's clock.
+    fn flush(&self, engine: &mut Engine, r: &mut dyn Renderer) -> Result<RunEnd, RunError> {
+        let now = if self.opts.wall_clock {
+            unix_now()
+        } else {
+            self.frame_clock.unwrap_or(0)
+        };
+        match engine.flush(now, r) {
+            Ok(()) => Ok(RunEnd::Done),
+            Err(e) => io_end(e),
+        }
+    }
+
     fn frame(&mut self, f: &Frame, engine: &mut Engine, r: &mut dyn Renderer) -> io::Result<()> {
         // A recording's clock is its frames: tick whenever it reaches a new
         // second.
@@ -417,9 +436,13 @@ mod tests {
     use overhear_decode::Decoded;
 
     use crate::engine::Config;
+    use crate::observe::{Observation, Segment, Ts};
     use crate::render::{Status, TextOpts};
     use crate::source::{Frame, LinkType, Next, SourceError, SourceStats};
     use crate::time::TimeStyle;
+    use crate::warn::Output;
+    use overhear_decode::Mac;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn oversized_buffers_are_replaced_when_returned() {
@@ -557,6 +580,7 @@ mod tests {
     struct Rec {
         seqs: Vec<u32>,
         statuses: Vec<Status>,
+        outputs: Vec<Output>,
         sleep: Duration,
         broken_pipe_on: Option<usize>,
     }
@@ -577,6 +601,11 @@ mod tests {
 
         fn status(&mut self, s: &Status) -> io::Result<()> {
             self.statuses.push(*s);
+            Ok(())
+        }
+
+        fn output(&mut self, o: &Output) -> io::Result<()> {
+            self.outputs.push(o.clone());
             Ok(())
         }
     }
@@ -930,6 +959,50 @@ mod tests {
             probe.dropped.load(Ordering::SeqCst),
             "capture thread not joined"
         );
+    }
+
+    #[test]
+    fn pending_summaries_flushed_when_the_run_ends() {
+        // FakeSource frames start at this second.
+        let t0 = 1_700_000_000;
+        for (truncated, want) in [(false, 1), (true, 0)] {
+            let mut e = engine();
+            let mut sink = Vec::new();
+            for (sid, sec) in [(1, t0), (9, t0), (9, t0 + 5)] {
+                let offer = Observation::DhcpReply {
+                    client: Mac([2, 0, 0, 0, 0, 0x39]),
+                    server_mac: Mac([2, 0, 0, 0, 0, sid]),
+                    server_id: Ipv4Addr::new(10, 0, 0, sid),
+                    msg_type: 2,
+                    router: None,
+                };
+                let ts = Ts { sec, usec: 0 };
+                e.tracker_mut()
+                    .apply(Segment::UNTAGGED, ts, &[offer], &mut sink);
+            }
+            assert_eq!(sink.len(), 2, "baseline and first warning");
+            let end_step = if truncated {
+                Step::Truncated
+            } else {
+                Step::Timeout
+            };
+            let (src, _probe) = fake(frames(3).chain(std::iter::once(end_step)), Duration::ZERO);
+            let mut r = Rec::default();
+            let stop = Arc::new(AtomicBool::new(false));
+            let end = run_threaded(
+                src,
+                &mut e,
+                &mut r,
+                stop,
+                opts(BUFFERS, false),
+                &mut keep_going(),
+            );
+            assert_eq!(matches!(end, Ok(RunEnd::Done)), !truncated, "{end:?}");
+            assert_eq!(r.outputs.len(), want, "{:?}", r.outputs);
+            if let Some(Output::Warning(w)) = r.outputs.first() {
+                assert_eq!((w.ts, w.count), (Ts { sec: t0, usec: 0 }, 1));
+            }
+        }
     }
 
     #[test]

@@ -6,6 +6,7 @@ mod dhcp;
 pub mod pins;
 mod repeat;
 mod router;
+mod segments;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -17,7 +18,7 @@ use crate::observe::{Observation, Segment, Ts};
 use crate::track::Budget;
 use dhcp::Dhcp;
 use repeat::Repeats;
-use router::Routers;
+use segments::Segments;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Rule {
@@ -42,7 +43,7 @@ impl Rule {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
     Low,
     High,
@@ -94,12 +95,17 @@ pub enum Output {
 
 /// Bytes charged per map entry beyond its key and value.
 const OVERHEAD: usize = 32;
+/// Repeat keys kept; when full, the oldest goes (see [`repeat`]).
+const MAX_REPEAT_KEYS: usize = 4096;
+/// Segments with learned state kept; when full, the least recently used
+/// segment's state goes and is learned again later.
+const MAX_SEGMENTS: usize = 256;
 
 /// Runs the rules. Everything it learns is charged to the shared [`Budget`].
 pub struct WarnEngine {
     pins: Pins,
+    segments: Segments,
     dhcp: Dhcp,
-    routers: Routers,
     repeats: Repeats,
 }
 
@@ -107,8 +113,8 @@ impl WarnEngine {
     pub fn new(pins: Pins) -> Self {
         WarnEngine {
             pins,
+            segments: Segments::new(),
             dhcp: Dhcp::new(),
-            routers: Routers::new(),
             repeats: Repeats::new(),
         }
     }
@@ -123,10 +129,13 @@ impl WarnEngine {
         budget: &mut Budget,
         out: &mut Vec<Output>,
     ) {
+        let segs = &mut self.segments;
         let found = match obs {
-            Observation::DhcpReply { .. } => self.dhcp.reply(&self.pins, seg, ts, obs, budget),
+            Observation::DhcpReply { .. } => {
+                self.dhcp.reply(&self.pins, segs, seg, ts, obs, budget)
+            }
             Observation::RouterAdvert { .. } => {
-                self.routers.advert(&self.pins, seg, ts, obs, budget)
+                router::advert(&self.pins, segs, seg, ts, obs, budget)
             }
             _ => None,
         };
@@ -140,6 +149,11 @@ impl WarnEngine {
     /// Called about once a second: outputs the repeat summaries due at `now`.
     pub fn tick(&mut self, now: Ts, budget: &mut Budget, out: &mut Vec<Output>) {
         self.repeats.tick(now, budget, out);
+    }
+
+    /// The run ends: outputs every pending repeat summary now, due or not.
+    pub fn flush(&mut self, now: Ts, budget: &mut Budget, out: &mut Vec<Output>) {
+        self.repeats.flush(now, budget, out);
     }
 
     /// Drops what is kept about `mac` once the device table evicted it.
@@ -159,13 +173,25 @@ impl WarnEngine {
 
     /// Whether an expected DHCP server named `ip` as a router on `seg`.
     pub fn is_gateway(&self, seg: Segment, ip: Ipv4Addr) -> bool {
-        self.dhcp.is_gateway(seg, ip)
+        self.segments
+            .peek(seg)
+            .is_some_and(|l| l.gateways.iter().any(|g| *g == ip))
     }
 
     /// Bytes of state, counted from scratch; what this engine has charged to
     /// the budget.
     pub fn cost(&self) -> usize {
-        self.dhcp.cost() + self.routers.cost() + self.repeats.cost()
+        self.segments.cost() + self.dhcp.cost() + self.repeats.cost()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn repeat_keys(&self) -> usize {
+        self.repeats.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn learned_segments(&self) -> usize {
+        self.segments.len()
     }
 }
 
@@ -246,6 +272,13 @@ mod tests {
         fn tick(&mut self, sec: i64) -> Vec<Output> {
             let mut out = Vec::new();
             self.w.tick(t(sec), &mut self.b, &mut out);
+            assert_eq!(self.b.used(), self.w.cost(), "budget out of step");
+            out
+        }
+
+        fn flush(&mut self, sec: i64) -> Vec<Output> {
+            let mut out = Vec::new();
+            self.w.flush(t(sec), &mut self.b, &mut out);
             assert_eq!(self.b.used(), self.w.cost(), "budget out of step");
             out
         }
@@ -588,6 +621,92 @@ mod tests {
         assert_eq!(r.tick(610), []);
         assert_eq!(r.w.cost(), empty);
         assert_eq!(r.b.used(), empty);
+    }
+
+    /// A reply from a different server id for each `i`.
+    fn reply_n(i: u32) -> Observation<'static> {
+        reply(Ipv4Addr::from(0x0b00_0000 + i), 2)
+    }
+
+    #[test]
+    fn repeat_keys_capped_preferring_quiet_ones() {
+        let mut r = Rig::new(dhcp_pin("10.0.0.1"));
+        // The oldest key gets a pending count; the next oldest has none.
+        r.see(U, 0, &reply_n(0));
+        r.see(U, 0, &reply_n(0));
+        for i in 1..MAX_REPEAT_KEYS as u32 {
+            r.see(U, 0, &reply_n(i));
+        }
+        assert_eq!(r.w.repeat_keys(), MAX_REPEAT_KEYS);
+        let new = r.see(U, 1, &reply_n(1_000_000));
+        assert_eq!(warnings(&new).len(), 1);
+        assert_eq!(r.w.repeat_keys(), MAX_REPEAT_KEYS);
+        // Key 1 was dropped: it reports at once again.
+        assert_eq!(warnings(&r.see(U, 2, &reply_n(1))).len(), 1);
+        // Key 0 kept its pending count.
+        let out = r.tick(61);
+        assert_eq!(only_warning(&out).subject, "11.0.0.0");
+    }
+
+    #[test]
+    fn repeat_keys_capped_when_all_are_pending() {
+        let mut r = Rig::new(dhcp_pin("10.0.0.1"));
+        for i in 0..MAX_REPEAT_KEYS as u32 {
+            r.see(U, 0, &reply_n(i));
+            r.see(U, 0, &reply_n(i));
+        }
+        assert_eq!(warnings(&r.see(U, 1, &reply_n(1_000_000))).len(), 1);
+        assert_eq!(r.w.repeat_keys(), MAX_REPEAT_KEYS);
+        // The oldest pending key went; every other summary still comes.
+        let out = r.tick(61);
+        assert_eq!(out.len(), MAX_REPEAT_KEYS - 1);
+        assert!(warnings(&out).iter().all(|w| w.subject != "11.0.0.0"));
+    }
+
+    #[test]
+    fn flush_emits_pending_summaries_at_once() {
+        let mut r = Rig::new(dhcp_pin("10.0.0.1"));
+        let first = r.see(U, 0, &reply(ip("10.0.0.9"), 2));
+        assert_eq!(warnings(&first).len(), 1);
+        assert_eq!(r.see(U, 5, &reply(ip("10.0.0.9"), 2)), []);
+        let out = r.flush(5);
+        let w = only_warning(&out);
+        assert_eq!((w.ts, w.count), (t(5), 1));
+        assert_eq!(r.flush(6), []);
+        assert_eq!(r.tick(100), []);
+    }
+
+    #[test]
+    fn high_router_warning_not_held_back_by_low() {
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &advert(1, 1800, false, false));
+        let low = r.see(U, 1, &advert(2, 0, true, false));
+        assert_eq!(only_warning(&low).severity, Severity::Low);
+        let high = r.see(U, 2, &advert(2, 1800, false, false));
+        assert_eq!(only_warning(&high).severity, Severity::High);
+    }
+
+    #[test]
+    fn learned_state_capped_at_256_segments() {
+        let mut r = Rig::new(Pins::default());
+        for id in 1..=300u16 {
+            let s = seg(&id.to_string());
+            let out = r.see(s, 0, &reply(ip("10.0.0.1"), 2));
+            assert!(matches!(out.as_slice(), [Output::Baseline(_)]), "{out:?}");
+            // Segment 1 stays in use.
+            assert_eq!(r.see(seg("1"), 0, &reply(ip("10.0.0.1"), 5)), []);
+        }
+        assert_eq!(r.w.learned_segments(), MAX_SEGMENTS);
+        // Segment 1 is still known; segment 2 was dropped and learns anew.
+        let out = r.see(seg("1"), 1, &reply(ip("10.0.0.2"), 2));
+        assert_eq!(warnings(&out).len(), 1);
+        let out = r.see(seg("2"), 1, &reply(ip("10.0.0.2"), 2));
+        assert!(matches!(out.as_slice(), [Output::Baseline(_)]), "{out:?}");
+        // Routers count against the same cap.
+        for id in 301..=600u16 {
+            r.see(seg(&id.to_string()), 2, &advert(1, 1800, false, false));
+        }
+        assert_eq!(r.w.learned_segments(), MAX_SEGMENTS);
     }
 
     #[test]
