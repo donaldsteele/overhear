@@ -17,8 +17,29 @@ const TYPE_TXT: u16 = 16;
 const TYPE_AAAA: u16 = 28;
 const TYPE_SRV: u16 = 33;
 
-pub fn tag() -> &'static str {
-    "mDNS"
+/// Which DNS-shaped protocol a message was carried by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flavor {
+    Mdns,
+    Llmnr,
+}
+
+impl Flavor {
+    /// Name shown in the second column and the verbose header.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Flavor::Mdns => "mDNS",
+            Flavor::Llmnr => "LLMNR",
+        }
+    }
+
+    /// Key of the JSON protocol object.
+    pub fn json_key(self) -> &'static str {
+        match self {
+            Flavor::Mdns => "mdns",
+            Flavor::Llmnr => "llmnr",
+        }
+    }
 }
 
 /// `A`, `PTR`, … or `TYPE{n}`.
@@ -205,10 +226,11 @@ fn record_line(r: &Record<'_>, out: &mut String) {
     out.push('\n');
 }
 
-pub fn verbose(m: &DnsMessage<'_>, out: &mut String) {
+pub fn verbose(flavor: Flavor, m: &DnsMessage<'_>, out: &mut String) {
     let _ = writeln!(
         out,
-        "  mDNS  {} id {} flags 0x{:04x} questions {} records {}",
+        "  {:<6}{} id {} flags 0x{:04x} questions {} records {}",
+        flavor.tag(),
         if m.is_response() { "response" } else { "query" },
         m.id,
         m.flags,
@@ -223,8 +245,8 @@ pub fn verbose(m: &DnsMessage<'_>, out: &mut String) {
     }
 }
 
-pub fn json(m: &DnsMessage<'_>, w: &mut JsonWriter) {
-    w.obj(Some("mdns"));
+pub fn json(flavor: Flavor, m: &DnsMessage<'_>, w: &mut JsonWriter) {
+    w.obj(Some(flavor.json_key()));
     w.u64(Some("id"), u64::from(m.id));
     w.u64(Some("flags"), u64::from(m.flags));
     w.bool(Some("response"), m.is_response());
@@ -349,6 +371,76 @@ pub fn observe<'a>(p: &Packet<'a>, m: &DnsMessage<'a>, out: &mut Vec<Observation
             }
             _ => {}
         }
+    }
+}
+
+/// LLMNR summary: `query {name} {TYPE}`, or `{name} → {address}` with
+/// ` [conflict]` and ` [tentative]` for the C and T flags.
+pub fn llmnr_summary(m: &DnsMessage<'_>, out: &mut String) {
+    const CONFLICT: u16 = 0x0400;
+    const TENTATIVE: u16 = 0x0100;
+    if !m.is_response() {
+        return summary(m, out);
+    }
+    let addr = m.records.iter().find_map(|r| match &r.rdata {
+        RData::A(a) => Some((r, IpAddr::V4(*a))),
+        RData::Aaaa(a) => Some((r, IpAddr::V6(*a))),
+        _ => None,
+    });
+    match addr {
+        Some((r, ip)) => {
+            push_name(out, &r.name, LINE_FIELD_MAX);
+            let _ = write!(out, " → {ip}");
+        }
+        None => match m.records.first() {
+            Some(r) => {
+                push_name(out, &r.name, LINE_FIELD_MAX);
+                let _ = write!(out, " {}", type_name(r.rtype));
+            }
+            None => out.push_str("response"),
+        },
+    }
+    if m.flags & CONFLICT != 0 {
+        out.push_str(" [conflict]");
+    }
+    if m.flags & TENTATIVE != 0 {
+        out.push_str(" [tentative]");
+    }
+}
+
+/// An LLMNR response's addresses teach a name, and are what the warn engine
+/// checks for several answerers and poisoning patterns.
+pub fn llmnr_observe<'a>(p: &Packet<'a>, m: &DnsMessage<'a>, out: &mut Vec<Observation<'a>>) {
+    let mac = p.eth.src;
+    out.push(Observation::Heard {
+        mac,
+        proto: ProtoTag::Llmnr,
+    });
+    if !m.is_response() {
+        return;
+    }
+    for r in &m.records {
+        let data: Vec<u8> = match &r.rdata {
+            RData::A(a) if r.rtype == TYPE_A => a.octets().to_vec(),
+            RData::Aaaa(a) if r.rtype == TYPE_AAAA => a.octets().to_vec(),
+            _ => continue,
+        };
+        if !r.name.is_valid() {
+            continue;
+        }
+        if let Some(l) = r.name.first_label().filter(|l| !l.is_empty()) {
+            out.push(Observation::Name {
+                mac,
+                name: Cow::Borrowed(l),
+                source: NameSource::Llmnr,
+            });
+        }
+        out.push(Observation::NameAnswer {
+            mac,
+            kind: AnswerKind::Llmnr,
+            name: Cow::Owned(r.name.dotted()),
+            data: Cow::Owned(data),
+        });
     }
 }
 
@@ -697,7 +789,7 @@ mod tests {
         let b = chromecast(4500).question("q.local", 255, 0x8001);
         let s = with(1, &b, |_, m| {
             let mut s = String::new();
-            verbose(m, &mut s);
+            verbose(Flavor::Mdns, m, &mut s);
             s
         });
         let want = "  mDNS  response id 0 flags 0x8400 questions 1 records 4\n\
@@ -721,7 +813,7 @@ mod tests {
         let s = with(1, &b, |_, m| {
             let mut w = JsonWriter::new();
             w.obj(None);
-            json(m, &mut w);
+            json(Flavor::Mdns, m, &mut w);
             w.end();
             w.as_str().to_string()
         });
@@ -729,5 +821,158 @@ mod tests {
             s,
             r#"{"mdns":{"id":0,"flags":33792,"response":true,"questions":[{"name":"q.local","type":1,"type_name":"A","class":1,"unicast_response":false}],"records":[{"section":"answer","name":"a\u001b.local","type":1,"type_name":"A","class":1,"cache_flush":true,"ttl":120,"addr":"192.168.1.33"}]}}"#
         );
+    }
+
+    fn llmnr_frame(src: u8, b: &DnsBuilder) -> Vec<u8> {
+        let ip = ipv4_udp(v4(src), v4(1), 5355, 50000, &b.bytes());
+        eth_ipv4(mac(1), mac(src), &ip)
+    }
+
+    fn with_llmnr<R>(
+        src: u8,
+        b: &DnsBuilder,
+        f: impl FnOnce(&Packet<'_>, &DnsMessage<'_>) -> R,
+    ) -> R {
+        let fr = llmnr_frame(src, b);
+        let p = decode(&fr).unwrap();
+        let Proto::Llmnr(m) = &p.proto else {
+            panic!("not llmnr")
+        };
+        f(&p, m)
+    }
+
+    fn llmnr_line(b: &DnsBuilder) -> String {
+        with_llmnr(1, b, |_, m| {
+            let mut s = String::new();
+            llmnr_summary(m, &mut s);
+            s
+        })
+    }
+
+    fn llmnr_reply(flags: u16) -> DnsBuilder {
+        DnsBuilder::new(flags).answer("wpad", 1, 1, 30, RDataSpec::A(v4(66)))
+    }
+
+    #[test]
+    fn llmnr_query_summary() {
+        let b = DnsBuilder::new(0).question("wpad", 1, 1);
+        assert_eq!(llmnr_line(&b), "query wpad A");
+        let b = DnsBuilder::new(0).question("host", 28, 1);
+        assert_eq!(llmnr_line(&b), "query host AAAA");
+    }
+
+    #[test]
+    fn llmnr_response_summaries() {
+        assert_eq!(llmnr_line(&llmnr_reply(0x8000)), "wpad → 192.168.1.66");
+        assert_eq!(
+            llmnr_line(&llmnr_reply(0x8400)),
+            "wpad → 192.168.1.66 [conflict]"
+        );
+        assert_eq!(
+            llmnr_line(&llmnr_reply(0x8100)),
+            "wpad → 192.168.1.66 [tentative]"
+        );
+        assert_eq!(
+            llmnr_line(&llmnr_reply(0x8500)),
+            "wpad → 192.168.1.66 [conflict] [tentative]"
+        );
+        let b = DnsBuilder::new(0x8000).answer(
+            "v6host",
+            28,
+            1,
+            30,
+            RDataSpec::Aaaa("fe80::1".parse().unwrap()),
+        );
+        assert_eq!(llmnr_line(&b), "v6host → fe80::1");
+    }
+
+    #[test]
+    fn llmnr_response_without_address() {
+        assert_eq!(llmnr_line(&DnsBuilder::new(0x8000)), "response");
+        let b = DnsBuilder::new(0x8000).answer("x", 16, 1, 1, RDataSpec::Txt(vec![]));
+        assert_eq!(llmnr_line(&b), "x TXT");
+    }
+
+    #[test]
+    fn llmnr_summary_escapes_the_name() {
+        let b = DnsBuilder::new(0).question("a\u{1b}b", 1, 1);
+        assert_eq!(llmnr_line(&b), "query a\\x1bb A");
+    }
+
+    #[test]
+    fn llmnr_response_observations() {
+        let b = llmnr_reply(0x8000);
+        let m = Mac(mac(0x66));
+        with_llmnr(0x66, &b, |p, md| {
+            let mut obs = Vec::new();
+            llmnr_observe(p, md, &mut obs);
+            check_llmnr_observations(obs, m);
+        });
+    }
+
+    fn check_llmnr_observations(obs: Vec<Observation<'_>>, m: Mac) {
+        assert_eq!(
+            obs,
+            vec![
+                Observation::Heard {
+                    mac: m,
+                    proto: ProtoTag::Llmnr
+                },
+                Observation::Name {
+                    mac: m,
+                    name: Cow::Borrowed(&b"wpad"[..]),
+                    source: NameSource::Llmnr
+                },
+                Observation::NameAnswer {
+                    mac: m,
+                    kind: AnswerKind::Llmnr,
+                    name: Cow::Borrowed(&b"wpad"[..]),
+                    data: Cow::Owned(vec![192, 168, 1, 66])
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn llmnr_query_and_non_address_records_only_hear() {
+        for b in [
+            DnsBuilder::new(0).question("wpad", 1, 1),
+            DnsBuilder::new(0x8000).answer("x", 16, 1, 1, RDataSpec::Txt(vec![])),
+        ] {
+            with_llmnr(5, &b, |p, m| {
+                let mut out = Vec::new();
+                llmnr_observe(p, m, &mut out);
+                assert!(
+                    matches!(
+                        out.as_slice(),
+                        [Observation::Heard {
+                            proto: ProtoTag::Llmnr,
+                            ..
+                        }]
+                    ),
+                    "{out:?}"
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn llmnr_verbose_and_json_use_their_own_labels() {
+        let b = DnsBuilder::new(0).question("wpad", 1, 1);
+        let (v, j) = with_llmnr(1, &b, |_, m| {
+            let mut s = String::new();
+            verbose(Flavor::Llmnr, m, &mut s);
+            let mut w = JsonWriter::new();
+            w.obj(None);
+            json(Flavor::Llmnr, m, &mut w);
+            w.end();
+            (s, w.as_str().to_string())
+        });
+        assert!(
+            v.starts_with("  LLMNR query id 0 flags 0x0000 questions 1 records 0\n"),
+            "{v}"
+        );
+        assert!(j.starts_with(r#"{"llmnr":{"id":0,"#), "{j}");
+        assert_eq!(Flavor::Llmnr.tag(), "LLMNR");
     }
 }

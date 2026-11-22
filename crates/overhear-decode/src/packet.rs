@@ -1,7 +1,7 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
 use crate::{
-    Arp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Nd, Problem, arp, dhcp, dns,
-    ethernet, nd,
+    Arp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Nbns, Nd, Problem, arp, dhcp, dns,
+    ethernet, nbns, nd,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +24,8 @@ pub enum Proto<'a> {
     Dhcp(Dhcp<'a>),
     Nd(Nd<'a>),
     Mdns(DnsMessage<'a>),
+    Llmnr(DnsMessage<'a>),
+    Nbns(Nbns<'a>),
     Other { payload: &'a [u8] },
 }
 
@@ -59,6 +61,12 @@ fn dispatch_udp<'a>(
     match ip {
         IpHeader::V4(_) if bootp(udp.src_port) || bootp(udp.dst_port) => {
             dhcp::parse(c, problems).map(Proto::Dhcp)
+        }
+        IpHeader::V4(_) if udp.src_port == 137 || udp.dst_port == 137 => {
+            nbns::parse(c, problems).map(Proto::Nbns)
+        }
+        _ if udp.src_port == 5355 || udp.dst_port == 5355 => {
+            dns::parse(c, problems).map(Proto::Llmnr)
         }
         _ if udp.src_port == 5353 || udp.dst_port == 5353 => {
             dns::parse(c, problems).map(Proto::Mdns)
@@ -514,5 +522,43 @@ mod tests {
             }
         }
         assert!(parsed_ptr);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod name_service_tests {
+    use super::*;
+    use overhear_testgen::*;
+    use std::net::{Ipv4Addr, Ipv6Addr};
+
+    #[test]
+    fn llmnr_dispatch_on_port_5355_over_v4_and_v6() {
+        let b = DnsBuilder::new(0).question("wpad", 1, 1).bytes();
+        let a = Ipv4Addr::new(10, 0, 0, 5);
+        let ip4 = ipv4_udp(a, Ipv4Addr::new(224, 0, 0, 252), 50000, 5355, &b);
+        let ip6 = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 5355, 50000, &b);
+        for f in [
+            eth_ipv4(mac(1), mac(2), &ip4),
+            eth_ipv6(mac(1), mac(2), &ip6),
+        ] {
+            let p = decode(&f).unwrap();
+            assert!(matches!(&p.proto, Proto::Llmnr(m) if m.questions.len() == 1));
+            assert!(p.problems.is_empty());
+        }
+    }
+
+    #[test]
+    fn nbns_dispatch_on_port_137_over_v4_only() {
+        let b = nbns(1, 0, &[(nb_encode("HOST", 0), 0x20)], &[]);
+        let a = Ipv4Addr::new(10, 0, 0, 5);
+        for (s, d) in [(137, 137), (50000, 137), (137, 50000)] {
+            let f = eth_ipv4(mac(1), mac(2), &ipv4_udp(a, a, s, d, &b));
+            let p = decode(&f).unwrap();
+            assert!(matches!(&p.proto, Proto::Nbns(m) if m.questions.len() == 1));
+        }
+        let ip6 = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 137, 137, &b);
+        let f = eth_ipv6(mac(1), mac(2), &ip6);
+        assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
     }
 }

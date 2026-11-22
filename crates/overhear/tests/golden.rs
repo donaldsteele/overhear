@@ -129,3 +129,8 @@ fn nd() {
 fn mdns() {
     golden("mdns");
 }
+
+#[test]
+fn llmnr_nbns() {
+    golden("llmnr_nbns");
+}

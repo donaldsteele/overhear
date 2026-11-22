@@ -3,10 +3,13 @@
 pub mod arp;
 pub mod dhcp;
 pub mod dns;
+pub mod nbns;
 pub mod nd;
 pub mod other;
 
 use overhear_decode::{Packet, Proto};
+
+use self::dns::Flavor;
 
 use crate::json::JsonWriter;
 use crate::observe::Observation;
@@ -18,7 +21,9 @@ pub fn tag(p: &Packet<'_>) -> &'static str {
         Proto::Other { .. } => other::tag(p),
         Proto::Dhcp(_) => dhcp::tag(),
         Proto::Nd(_) => nd::tag(),
-        Proto::Mdns(_) => dns::tag(),
+        Proto::Mdns(_) => Flavor::Mdns.tag(),
+        Proto::Llmnr(_) => Flavor::Llmnr.tag(),
+        Proto::Nbns(_) => nbns::tag(),
     }
 }
 
@@ -30,6 +35,8 @@ pub fn summary(p: &Packet<'_>, out: &mut String) {
         Proto::Dhcp(d) => dhcp::summary(d, out),
         Proto::Nd(n) => nd::summary(p, n, out),
         Proto::Mdns(m) => dns::summary(m, out),
+        Proto::Llmnr(m) => dns::llmnr_summary(m, out),
+        Proto::Nbns(m) => nbns::summary(m, out),
     }
 }
 
@@ -40,7 +47,9 @@ pub fn verbose(p: &Packet<'_>, frame: &[u8], out: &mut String) {
         Proto::Other { payload } => other::verbose(payload.len(), frame, out),
         Proto::Dhcp(d) => dhcp::verbose(d, out),
         Proto::Nd(n) => nd::verbose(p, n, out),
-        Proto::Mdns(m) => dns::verbose(m, out),
+        Proto::Mdns(m) => dns::verbose(Flavor::Mdns, m, out),
+        Proto::Llmnr(m) => dns::verbose(Flavor::Llmnr, m, out),
+        Proto::Nbns(m) => nbns::verbose(m, out),
     }
 }
 
@@ -51,7 +60,9 @@ pub fn json_name(p: &Packet<'_>) -> &'static str {
         Proto::Other { .. } => "other",
         Proto::Dhcp(_) => "dhcp",
         Proto::Nd(_) => "nd",
-        Proto::Mdns(_) => "mdns",
+        Proto::Mdns(_) => Flavor::Mdns.json_key(),
+        Proto::Llmnr(_) => Flavor::Llmnr.json_key(),
+        Proto::Nbns(_) => "nbns",
     }
 }
 
@@ -62,7 +73,9 @@ pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
         Proto::Other { payload } => other::json(p, payload.len(), w),
         Proto::Dhcp(d) => dhcp::json(d, w),
         Proto::Nd(n) => nd::json(p, n, w),
-        Proto::Mdns(m) => dns::json(m, w),
+        Proto::Mdns(m) => dns::json(Flavor::Mdns, m, w),
+        Proto::Llmnr(m) => dns::json(Flavor::Llmnr, m, w),
+        Proto::Nbns(m) => nbns::json(m, w),
     }
 }
 
@@ -74,5 +87,7 @@ pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
         Proto::Dhcp(d) => dhcp::observe(p, d, out),
         Proto::Nd(n) => nd::observe(p, n, out),
         Proto::Mdns(m) => dns::observe(p, m, out),
+        Proto::Llmnr(m) => dns::llmnr_observe(p, m, out),
+        Proto::Nbns(m) => nbns::observe(p, m, out),
     }
 }

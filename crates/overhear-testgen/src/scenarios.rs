@@ -428,6 +428,114 @@ fn mdns_scenario() -> Vec<TFrame> {
     stamp(f)
 }
 
+fn llmnr_scenario_frames() -> Vec<(Vec<u8>, Option<u32>)> {
+    const RESPONSE: u16 = 0x8000;
+    let query = |name: &str| {
+        let ip = ipv4_udp(
+            ip(0x20),
+            Ipv4Addr::new(224, 0, 0, 252),
+            50000,
+            5355,
+            &DnsBuilder::new(0).id(1).question(name, 1, 1).bytes(),
+        );
+        (
+            eth_ipv4([0x01, 0x00, 0x5e, 0, 0, 0xfc], mac(0x20), &ip),
+            None,
+        )
+    };
+    // Unicast to the asker, as a mirror port shows it.
+    let answer = |src: u8, name: &str| {
+        let b = DnsBuilder::new(RESPONSE).id(1).question(name, 1, 1).answer(
+            name,
+            1,
+            1,
+            30,
+            RDataSpec::A(ip(src)),
+        );
+        let ip = ipv4_udp(ip(src), ip(0x20), 5355, 50000, &b.bytes());
+        (eth_ipv4(mac(0x20), mac(src), &ip), None)
+    };
+    // The same host answers for every name it is asked about.
+    vec![
+        query("wpad"),
+        answer(0x66, "wpad"),
+        answer(0x66, "fileserver"),
+        answer(0x66, "printer"),
+    ]
+}
+
+fn nbns_frame(src: u8, dst: [u8; 6], payload: &[u8]) -> (Vec<u8>, Option<u32>) {
+    let ip = ipv4_udp(ip(src), Ipv4Addr::new(192, 168, 1, 255), 137, 137, payload);
+    (eth_ipv4(dst, mac(src), &ip), None)
+}
+
+fn nbns_scenario() -> Vec<TFrame> {
+    let mut f = llmnr_scenario_frames();
+    let nb = |group: bool, addr: u8| vec![if group { 0x80 } else { 0 }, 0, 192, 168, 1, addr];
+    // Registration (opcode 5): the name as the question, its NB record as an
+    // answer that points back at it.
+    let register = |name: &str, suffix: u8, group: bool, addr: u8| {
+        nbns(
+            0x1234,
+            5 << 11 | 0x0110,
+            &[(nb_encode(name, suffix), 0x20)],
+            &[(vec![0xc0, 0x0c], 0x20, 300_000, nb(group, addr))],
+        )
+    };
+    f.push(nbns_frame(
+        0x50,
+        BCAST,
+        &register("WORKSTATION1", 0x00, false, 0x50),
+    ));
+    f.push(nbns_frame(0x50, BCAST, &register("HOME", 0x00, true, 0x50)));
+    f.push(nbns_frame(
+        0x20,
+        BCAST,
+        &nbns(
+            0x2001,
+            0x0110,
+            &[(nb_encode("FILESERVER", 0x20), 0x20)],
+            &[],
+        ),
+    ));
+    // Two hosts claim to be the file server.
+    let reply = |addr: u8| {
+        nbns(
+            0x2001,
+            0x8500,
+            &[],
+            &[(
+                nb_encode("FILESERVER", 0x20),
+                0x20,
+                300_000,
+                nb(false, addr),
+            )],
+        )
+    };
+    f.push(nbns_frame(0x40, mac(0x20), &reply(0x40)));
+    f.push(nbns_frame(0x41, mac(0x20), &reply(0x41)));
+    // A name with a character outside the encoding alphabet.
+    let mut bad = nb_encode("FILESERVER", 0x20);
+    bad[5] = b'!';
+    f.push(nbns_frame(
+        0x22,
+        BCAST,
+        &nbns(0x3001, 0x0110, &[(bad, 0x20)], &[]),
+    ));
+    // A name with a terminal escape in it.
+    f.push(nbns_frame(
+        0x23,
+        BCAST,
+        &nbns(
+            0x3002,
+            0x0110,
+            &[(nb_encode("EVIL\u{1b}[2JNAME", 0x20), 0x20)],
+            &[],
+        ),
+    ));
+    stamp(f)
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
     vec![
@@ -436,5 +544,6 @@ pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
         ("dhcp", dhcp_scenario()),
         ("nd", nd_scenario()),
         ("mdns", mdns_scenario()),
+        ("llmnr_nbns", nbns_scenario()),
     ]
 }

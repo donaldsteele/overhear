@@ -19,6 +19,7 @@ mod dns;
 mod ether;
 mod ip;
 mod mac;
+mod nbns;
 mod nd;
 mod packet;
 mod problem;
@@ -32,6 +33,7 @@ pub use dns::{
 pub use ether::{EthHeader, EthKind, Vlan, Vlans, ethernet};
 pub use ip::{Frag, IpHeader, Ipv4Header, Ipv6Header};
 pub use mac::Mac;
+pub use nbns::{NbName, NbQuestion, NbRecord, Nbns, nb_entries, parse as parse_nbns};
 pub use nd::{Nd, NdOpt, parse as parse_nd};
 pub use packet::{Decoded, L4, Packet, Proto, UdpHeader, decode};
 pub use problem::{Layer, Problem};

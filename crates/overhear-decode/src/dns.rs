@@ -221,10 +221,11 @@ pub fn txt_strings(txt: &[u8]) -> impl Iterator<Item = &[u8]> {
 /// Reads a name at the cursor. A name whose extent on the wire cannot be
 /// found stops the message (`Err`); one that merely fails validation is kept
 /// as an invalid name.
-fn read_name<'a>(
+pub(crate) fn read_name<'a>(
     r: &mut Cursor<'a>,
     msg: &'a [u8],
     start: usize,
+    layer: Layer,
     problems: &mut Vec<Problem>,
 ) -> Result<Name<'a>, ()> {
     let abs = r.pos();
@@ -233,7 +234,7 @@ fn read_name<'a>(
         Ok(w) => w,
         Err(reason) => {
             problems.push(Problem {
-                layer: Layer::Dns,
+                layer,
                 reason,
                 offset: abs,
                 len: if reason == "truncated" {
@@ -246,7 +247,7 @@ fn read_name<'a>(
         }
     };
     r.skip(wire).ok_or(())?;
-    Ok(make_name(msg, off, abs, wire, problems))
+    Ok(make_name(msg, off, abs, wire, layer, problems))
 }
 
 fn make_name<'a>(
@@ -254,13 +255,14 @@ fn make_name<'a>(
     off: usize,
     abs: usize,
     wire: usize,
+    layer: Layer,
     problems: &mut Vec<Problem>,
 ) -> Name<'a> {
     let valid = match walk(msg, off, |_| {}) {
         Ok(()) => true,
         Err(reason) => {
             problems.push(Problem {
-                layer: Layer::Dns,
+                layer,
                 reason,
                 offset: abs,
                 len: wire,
@@ -306,6 +308,7 @@ fn rdata<'a>(
             rel,
             abs.saturating_add(skip),
             wire,
+            Layer::Dns,
             problems,
         ))
     };
@@ -380,7 +383,7 @@ pub fn parse<'a>(c: &mut Cursor<'a>, problems: &mut Vec<Problem>) -> Option<DnsM
     };
     'parse: {
         for _ in 0..qd {
-            let Ok(name) = read_name(&mut r, msg, start, problems) else {
+            let Ok(name) = read_name(&mut r, msg, start, Layer::Dns, problems) else {
                 break 'parse;
             };
             let (Some(qtype), Some(qclass)) = (r.be16(), r.be16()) else {
@@ -404,7 +407,7 @@ pub fn parse<'a>(c: &mut Cursor<'a>, problems: &mut Vec<Problem>) -> Option<DnsM
             } else {
                 Section::Additional
             };
-            let Ok(name) = read_name(&mut r, msg, start, problems) else {
+            let Ok(name) = read_name(&mut r, msg, start, Layer::Dns, problems) else {
                 break 'parse;
             };
             let (Some(rtype), Some(class), Some(ttl), Some(rdlen)) =
