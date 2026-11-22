@@ -53,9 +53,6 @@ impl DeviceTable {
         let stamp = self.clock;
         let is_new = !self.map.contains_key(&mac);
         if is_new {
-            if !matches!(obs, Observation::Heard { .. }) {
-                return;
-            }
             let d = Device::new(mac, ts.sec);
             budget.adjust(0, d.cost() + OVERHEAD);
             self.lru.insert((stamp, mac));
@@ -333,6 +330,20 @@ mod tests {
         assert!(t.len() <= 300);
     }
 
+    #[test]
+    fn name_for_unknown_mac_creates_device() {
+        let (mut t, mut b) = setup();
+        let m = mac(7);
+        t.apply(U, ts(42), &name(m, b"client", NameSource::Dhcp), &mut b);
+        let d = t.get(&m).expect("created");
+        assert_eq!(d.display_name(), Some(&b"client"[..]));
+        assert_eq!((d.packets, d.first_heard, d.last_heard), (0, 42, 42));
+        assert_eq!(d.heard, 0);
+        assert_eq!(b.used(), t.recount());
+        t.apply(U, ts(43), &heard(m), &mut b);
+        assert_eq!(t.get(&m).map(|d| d.packets), Some(1));
+        assert_eq!(b.used(), t.recount());
+    }
     #[test]
     fn eviction_respects_budget() {
         let mut tr = Tracker::new(64 * 1024);
