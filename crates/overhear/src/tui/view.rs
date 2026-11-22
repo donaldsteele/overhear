@@ -6,7 +6,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 
 use super::app::App;
 use crate::escape::{LINE_FIELD_MAX, TextKind, needs_escape, push_text};
@@ -303,7 +303,9 @@ fn detail(f: &mut Frame, area: Rect, app: &App, tracker: &Tracker, mac: Mac) {
         Some(d) => detail_lines(d, app),
         None => vec![Line::raw(format!("{mac}: no longer tracked"))],
     };
-    f.render_widget(Paragraph::new(lines), area);
+    // Long lists (addresses, names, services) wrap instead of running off
+    // the right edge.
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
 
 /// Draws the whole screen. `clock` is the time of day for the header.
@@ -729,6 +731,31 @@ mod tests {
         }
         assert!(!s.contains("\\\\x1b") && !s.contains('\x1b'), "{s}");
         assert!(!s.contains("VENDOR") && !s.contains("HEARD"));
+    }
+
+    #[test]
+    fn detail_view_wraps_long_lists() {
+        let mut t = tracker();
+        device(&mut t, 1, mac(7), b"host", [10, 0, 0, 7], &[ProtoTag::Mdns]);
+        let names: Vec<String> = (0..10).map(|i| format!("_service{i}._tcp")).collect();
+        for n in &names {
+            apply(
+                &mut t,
+                2,
+                Observation::Service {
+                    mac: mac(7),
+                    name: Cow::Owned(n.clone().into_bytes()),
+                },
+            );
+        }
+        let mut app = utc_app();
+        app.detail = Some(mac(7));
+        let s = render(&app, &t, 80, 30);
+        println!("{s}");
+        // Wrapped, not cut at the right edge: every service is on screen.
+        for n in &names {
+            assert!(s.contains(n.as_str()), "missing {n:?} in\n{s}");
+        }
     }
 
     #[test]
