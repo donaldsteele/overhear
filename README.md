@@ -278,7 +278,7 @@ turned into a unit test with a hand-built input instead.
 | `scripts/check.sh` | All the checks above |
 | `scripts/arm64-test.sh` | Tests and debug build for arm64 in the Debian 12 image, with the glibc 2.36 limit |
 | `scripts/live-test.sh` | Runs the real binary on a veth pair in a private namespace, injects every sample, compares the output, and checks that overhear transmits nothing |
-| `scripts/perf.sh RATE SECONDS` | Offers generated frames at RATE per second to overhear in line and JSON mode and passes when nothing is dropped |
+| `scripts/perf.sh RATE SECONDS` | Offers generated frames at RATE per second to overhear in line and JSON mode and passes when nothing is dropped and the injector reached at least 98% of RATE |
 | `scripts/priv-test.sh` | Checks the privilege drop (root and `setcap`) on a real capture of `lo` (needs sudo) |
 | `scripts/flood-test.sh` | Replays a million frames from different MACs and checks that the memory stays near the budget (64M gives at most 112 MiB resident) |
 | `scripts/update-oui.sh` | Regenerates the vendor table from the IEEE registries |

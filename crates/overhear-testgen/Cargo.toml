@@ -9,6 +9,7 @@ authors.workspace = true
 [dependencies]
 pcap-file = { workspace = true }
 pcap = { workspace = true }
+ctrlc = { workspace = true }
 
 [[bin]]
 name = "testgen"

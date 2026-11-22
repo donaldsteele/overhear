@@ -2,6 +2,8 @@
 
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use pcap::{Active, Capture, Direction};
@@ -59,7 +61,9 @@ pub fn inject(
     let limit = seconds.map(Duration::from_secs_f64);
     let mut sent: u64 = 0;
     let mut i = 0usize;
+    // Failed sends in a row; a success resets it.
     let mut retries = 0u64;
+    let mut warned = false;
     loop {
         let elapsed = start.elapsed();
         if let Some(l) = limit {
@@ -78,11 +82,15 @@ pub fn inject(
         while sent < due {
             let Some(f) = frames.get(i) else { break };
             match cap.sendpacket(f.as_slice()) {
-                Ok(()) => sent += 1,
+                Ok(()) => {
+                    sent += 1;
+                    retries = 0;
+                }
                 // The transmit queue is full: back off and retry the same frame.
                 Err(e) => {
-                    if retries == 0 {
+                    if !warned {
                         eprintln!("testgen: send: {e}");
+                        warned = true;
                     }
                     retries += 1;
                     if retries > 20_000 {
@@ -107,8 +115,12 @@ pub fn inject(
     Ok((sent, start.elapsed()))
 }
 
-/// Counts frames arriving on `iface` (direction In) for `seconds`.
+/// Counts frames arriving on `iface` (direction In) for `seconds`, or until
+/// SIGINT or SIGTERM. Says on stderr when it has started counting.
 pub fn count_inbound(iface: &str, seconds: f64) -> Result<u64, String> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&stop);
+    ctrlc::set_handler(move || flag.store(true, Ordering::SeqCst)).map_err(err)?;
     let cap = Capture::from_device(iface)
         .map_err(err)?
         .timeout(50)
@@ -118,13 +130,18 @@ pub fn count_inbound(iface: &str, seconds: f64) -> Result<u64, String> {
     cap.direction(Direction::In).map_err(err)?;
     let mut cap = cap.setnonblock().map_err(err)?;
     let end = Instant::now() + Duration::from_secs_f64(seconds);
+    eprintln!("testgen: counting inbound frames on {iface}");
     let mut n = 0;
-    while Instant::now() < end {
+    while Instant::now() < end && !stop.load(Ordering::SeqCst) {
         match cap.next_packet() {
             Ok(_) => n += 1,
             Err(pcap::Error::TimeoutExpired) => std::thread::sleep(Duration::from_millis(5)),
             Err(e) => return Err(err(e)),
         }
+    }
+    // Frames that arrived before the end but were not read yet still count.
+    while cap.next_packet().is_ok() {
+        n += 1;
     }
     Ok(n)
 }

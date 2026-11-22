@@ -158,7 +158,7 @@ fn main() -> ExitCode {
             eprintln!("       testgen flood <frames>");
             eprintln!("       testgen perfgen <out.pcap> <frames>");
             eprintln!("       testgen inject <iface> <pcap...> [--rate PPS] [--seconds S]");
-            eprintln!("       testgen count-inbound <iface> <seconds>");
+            eprintln!("       testgen count-inbound <iface> <seconds>   (or until SIGINT)");
             eprintln!("       testgen gen-oui <oui.csv> <mam.csv> <oui36.csv> <out.rs>");
             ExitCode::from(2)
         }

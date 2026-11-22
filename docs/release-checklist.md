@@ -3,8 +3,9 @@
 ## Speed (scripts/perf.sh)
 
 `scripts/perf.sh RATE SECONDS` offers generated frames (perfgen, 500 devices) to
-`overhear -i veth1` over a veth pair in a private namespace, in line mode and JSON mode,
-and passes when overhear reports zero kernel drops and zero channel drops.
+`overhear -i veth1` over a veth pair in a private namespace, in line mode and JSON mode.
+A mode passes when overhear exits normally and reports zero kernel drops and zero
+channel drops, and the injector achieved at least 98% of RATE.
 
 | Machine | Rate offered | Duration | Injector achieved | Line mode | JSON mode |
 |---------|--------------|----------|-------------------|-----------|-----------|
@@ -48,7 +49,9 @@ Machine: Raspberry Pi 4, 64-bit Raspberry Pi OS (Debian 12 based). Needs `iprout
    (The script runs in a private namespace made with `unshare`; join it from a second
    terminal with `nsenter -t PID -U -n --preserve-credentials`, where PID is the process
    id of the running `perf.sh`.)
-6. `SKIP_BUILD=1 scripts/priv-test.sh` prints `PASS` at the end and no `FAIL:` line.
+6. `SKIP_BUILD=1 scripts/priv-test.sh` prints one `PASS:` or `FAIL:` line per check (there
+   is no final summary line) and exits with status 0 only when every check passed:
+   no `FAIL:` line and `echo $?` prints 0.
 7. Run `overhear -t` for 10 minutes on a real LAN. Every warning that appears must make
    sense for that network (a real second DHCP server, a real router change); note any that do not.
 8. Record the results and the date below.

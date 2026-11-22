@@ -607,6 +607,7 @@ dependencies = [
 name = "overhear-testgen"
 version = "0.1.0"
 dependencies = [
+ "ctrlc",
  "pcap",
  "pcap-file",
 ]
