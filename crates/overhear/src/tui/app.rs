@@ -37,6 +37,8 @@ pub struct App {
     pub selected: usize,
     pub paused: bool,
     pub label: String,
+    /// Zone of the warning times, resolved once.
+    pub tz: jiff::tz::TimeZone,
     last_draw: Option<Instant>,
 }
 
@@ -49,6 +51,7 @@ impl App {
             selected: 0,
             paused: false,
             label: source_label,
+            tz: jiff::tz::TimeZone::system(),
             last_draw: None,
         }
     }

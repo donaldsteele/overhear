@@ -9,7 +9,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 
 use super::app::App;
-use crate::escape::{LINE_FIELD_MAX, TextKind, push_text};
+use crate::escape::{LINE_FIELD_MAX, TextKind, needs_escape, push_text};
 use crate::track::{Device, Tracker};
 use crate::vendor::{lookup, short};
 use crate::warn::{Severity, Warning};
@@ -112,19 +112,20 @@ fn table(f: &mut Frame, area: Rect, tracker: &Tracker) {
     f.render_widget(Table::new(rows, widths).header(head), area);
 }
 
-fn warning_line(w: &Warning) -> Line<'static> {
-    let time = crate::time::format_line(
-        w.ts.sec,
-        w.ts.usec,
-        &jiff::tz::TimeZone::system(),
-        crate::time::TimeStyle::Time,
-    );
+fn warning_line(w: &Warning, tz: &jiff::tz::TimeZone) -> Line<'static> {
+    let time = crate::time::format_line(w.ts.sec, w.ts.usec, tz, crate::time::TimeStyle::Time);
     let time = time.split('.').next().unwrap_or("");
     let mut text = format!("{time}  ");
     if let Some(seg) = w.segment.filter(|s| !s.is_untagged()) {
         let _ = write!(text, "[{seg}] ");
     }
-    text.push_str(&escaped(w.message.as_bytes(), MESSAGE_MAX));
+    // The warning engine already escaped the message; escaping again would
+    // double its backslashes. Replace anything unsafe that got through.
+    text.extend(
+        cut(&w.message, MESSAGE_MAX)
+            .chars()
+            .map(|c| if needs_escape(c) { '?' } else { c }),
+    );
     let style = match w.severity {
         Severity::High => Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
         Severity::Low => Style::new().fg(Color::Yellow),
@@ -140,7 +141,7 @@ fn warnings(f: &mut Frame, area: Rect, app: &App) {
         .warnings
         .iter()
         .take(usize::from(inner.height))
-        .map(warning_line)
+        .map(|w| warning_line(w, &app.tz))
         .collect();
     f.render_widget(Paragraph::new(lines), inner);
 }
@@ -331,5 +332,188 @@ mod tests {
         );
         let s = render(&App::new("eth0".into()), &t, 100, 20);
         assert!(s.contains("root 8000.00:11:22:33:44:01"), "{s}");
+    }
+
+    fn utc_app() -> App {
+        let mut app = App::new("eth0".into());
+        app.tz = jiff::tz::TimeZone::UTC;
+        app
+    }
+
+    fn warn_msg(sev: Severity, msg: &str) -> Output {
+        let Output::Warning(mut w) = second_server() else {
+            unreachable!()
+        };
+        w.severity = sev;
+        w.message = msg.into();
+        Output::Warning(w)
+    }
+
+    fn row_of(s: &str, needle: &str) -> usize {
+        s.lines().position(|l| l.contains(needle)).expect(needle)
+    }
+
+    #[test]
+    fn message_escape_not_doubled() {
+        let mut app = utc_app();
+        app.push_output(&warn_msg(Severity::High, "name \\x1b[2J seen"));
+        let s = render(&app, &tracker(), 100, 20);
+        assert!(s.contains("name \\x1b[2J seen"), "{s}");
+        assert!(!s.contains("\\\\x1b"));
+        assert!(!s.contains('\x1b'));
+    }
+
+    #[test]
+    fn raw_control_in_message_is_replaced() {
+        let mut app = utc_app();
+        app.push_output(&warn_msg(Severity::Low, "a\x1b[2Jb"));
+        let s = render(&app, &tracker(), 100, 20);
+        assert!(s.contains("a?[2Jb") && !s.contains('\x1b'), "{s}");
+    }
+
+    #[test]
+    fn table_sorted_newest_first_then_mac() {
+        let mut t = tracker();
+        device(
+            &mut t,
+            5,
+            mac(0x30),
+            b"old",
+            [10, 0, 0, 1],
+            &[ProtoTag::Arp],
+        );
+        device(
+            &mut t,
+            9,
+            mac(0x20),
+            b"tie-b",
+            [10, 0, 0, 2],
+            &[ProtoTag::Arp],
+        );
+        device(
+            &mut t,
+            9,
+            mac(0x10),
+            b"tie-a",
+            [10, 0, 0, 3],
+            &[ProtoTag::Arp],
+        );
+        let s = render(&utc_app(), &t, 100, 20);
+        let (a, b, c) = (row_of(&s, "tie-a"), row_of(&s, "tie-b"), row_of(&s, "old"));
+        assert!(a < b && b < c, "{s}");
+    }
+
+    #[test]
+    fn vendor_random_and_registered() {
+        let reg = Mac([0x00, 0x00, 0x0c, 1, 2, 3]);
+        let want = crate::vendor::lookup(reg)
+            .map(crate::vendor::short)
+            .expect("registered");
+        let mut t = tracker();
+        device(&mut t, 1, mac(1), b"rnd", [10, 0, 0, 1], &[ProtoTag::Arp]);
+        device(&mut t, 2, reg, b"reg", [10, 0, 0, 2], &[ProtoTag::Arp]);
+        let s = render(&utc_app(), &t, 100, 20);
+        let want = if want.chars().count() > 10 {
+            format!("{}…", want.chars().take(9).collect::<String>())
+        } else {
+            want
+        };
+        assert!(
+            s.lines()
+                .nth(row_of(&s, "rnd"))
+                .expect("row")
+                .contains("(random)")
+        );
+        let reg_row = s.lines().nth(row_of(&s, "reg")).expect("row");
+        assert!(
+            reg_row.contains(&want) && !reg_row.contains("(random)"),
+            "{s}"
+        );
+    }
+
+    #[test]
+    fn ipv6_fallback_and_cuts() {
+        let mut t = tracker();
+        apply(
+            &mut t,
+            1,
+            Observation::Heard {
+                mac: mac(1),
+                proto: ProtoTag::Nd,
+            },
+        );
+        apply(
+            &mut t,
+            1,
+            Observation::Address {
+                mac: mac(1),
+                ip: "2001:db8:1234:5678:9abc:def0:1234:5678"
+                    .parse()
+                    .expect("ip"),
+            },
+        );
+        apply(
+            &mut t,
+            1,
+            Observation::Name {
+                mac: mac(1),
+                name: Cow::Borrowed(b"abcdefghijklmnopqrstuvwxyz"),
+                source: NameSource::Mdns,
+            },
+        );
+        let s = render(&utc_app(), &t, 100, 20);
+        assert!(s.contains("2001:db8:1234:…"), "{s}");
+        assert!(!s.contains("5678:9abc"), "{s}");
+        assert!(
+            s.contains("abcdefghijklmno…") && !s.contains("abcdefghijklmnop"),
+            "{s}"
+        );
+    }
+
+    #[test]
+    fn warning_styles() {
+        let mut app = utc_app();
+        app.push_output(&warn_msg(Severity::Low, "low one"));
+        app.push_output(&warn_msg(Severity::High, "high one"));
+        let mut term = Terminal::new(TestBackend::new(100, 20)).expect("terminal");
+        term.draw(|f| draw(f, &app, &tracker(), "x")).expect("draw");
+        let buf = term.backend().buffer();
+        let style_at = |needle: &str| {
+            for y in 0..buf.area.height {
+                let line: String = (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect();
+                if let Some(i) = line.find(needle) {
+                    let x = u16::try_from(line[..i].chars().count()).expect("x");
+                    return buf[(x, y)].style();
+                }
+            }
+            panic!("{needle} not drawn");
+        };
+        let high = style_at("high one");
+        assert_eq!(high.fg, Some(ratatui::style::Color::Red));
+        assert!(high.add_modifier.contains(ratatui::style::Modifier::BOLD));
+        let low = style_at("low one");
+        assert_eq!(low.fg, Some(ratatui::style::Color::Yellow));
+        assert!(!low.add_modifier.contains(ratatui::style::Modifier::BOLD));
+    }
+
+    #[test]
+    fn small_areas_header_only_below_20x6() {
+        let mut t = tracker();
+        device(&mut t, 1, mac(1), b"dev", [10, 0, 0, 1], &[ProtoTag::Arp]);
+        let mut app = utc_app();
+        app.push_output(&second_server());
+        let small = render(&app, &t, 20, 5);
+        assert!(small.contains(" overhear"));
+        assert!(!small.contains("MAC") && !small.contains("warnings") && !small.contains("quit"));
+        assert!(
+            small.lines().skip(1).all(|l| l.trim().is_empty()),
+            "{small}"
+        );
+        let full = render(&app, &t, 20, 6);
+        assert!(full.contains("MAC") && full.contains("warnings"), "{full}");
+        assert!(
+            full.lines().last().expect("last").contains("q quit"),
+            "{full}"
+        );
     }
 }
