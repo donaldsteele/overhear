@@ -58,7 +58,7 @@ pub struct TextOpts {
     pub hex: bool,
 }
 
-/// Most problem bytes shown in verbose and JSON output.
+/// Most problem bytes shown in verbose output. JSON carries the whole range.
 pub const MAX_PROBLEM_BYTES: usize = 32;
 
 /// `C`, `S` or `Q` for the tag protocol identifier.

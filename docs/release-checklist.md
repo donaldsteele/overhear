@@ -60,4 +60,4 @@ Machine: Raspberry Pi 4, 64-bit Raspberry Pi OS (Debian 12 based). Needs `iprout
 
 | Date | Pi / OS | live-test | perf 20000 x 300 s (line / JSON) | TUI under load | priv-test | 10 min on a LAN | Notes |
 |------|---------|-----------|-----------------------------------|----------------|-----------|-----------------|-------|
-|      |         |           |                                   |                |           |                 |       |
+| not yet run | | | | | | | |

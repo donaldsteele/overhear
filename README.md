@@ -8,7 +8,8 @@ unexpected IPv6 router, two devices claiming one address, name-poisoning tools.
 
 It never transmits. It does not answer queries, scan, or look up names, so it is
 safe to leave on a mirror port of a network you do not own. It runs as one
-small binary on Linux (x86-64 and arm64, including a Raspberry Pi 4), as a
+small binary on Linux, x86-64 and arm64 (the arm64 packages are built and tested
+under emulation; the Raspberry Pi hardware checks have not been run yet), as a
 line-per-packet log, a verbose dump, JSON lines for scripts, or a full-screen view.
 
 Everything that comes off the wire is treated as hostile. Text from packets is
@@ -130,8 +131,8 @@ summarised once a minute.
 
 ## Raspberry Pi on a mirror port
 
-A Raspberry Pi 4 with a USB or built-in Ethernet port is enough to watch a network
-all day. For switches that support it, mirror (SPAN) the ports you care about to
+A Raspberry Pi 4 with a USB or built-in Ethernet port should be enough to watch a
+network all day. For switches that support it, mirror (SPAN) the ports you care about to
 the port the Pi is plugged into:
 
 1. Install the arm64 package: `sudo apt install ./overhear_0.1.0-1_arm64.deb`.
@@ -143,7 +144,8 @@ the port the Pi is plugged into:
    read. Narrow the mirror, or add filter words.
 
 On a mirror port or a hub you see the unicast replies as well as the broadcasts. The
-default memory budget of 64M suits a Pi 4; use `--max-memory 16M` on a small board.
+default memory budget of 64M should leave a Pi 4 plenty of room (not yet measured
+on one); use `--max-memory 16M` on a small board.
 
 ## What a passive listener can see
 
@@ -196,7 +198,7 @@ An IPv6 router baseline:
 The last line of a complete run:
 
 ```json
-{"schema":1,"type":"status","final":true,"packets":11,"kernel_drops":0,"channel_drops":0,"devices":4,"evictions":0}
+{"schema":1,"type":"status","final":true,"packets":13,"kernel_drops":0,"channel_drops":0,"devices":6,"evictions":0}
 ```
 
 A run that ends on an error (a truncated capture file, for example) has no final
@@ -243,8 +245,8 @@ the manual page, and the whole test suite again for arm64 in a Debian 12
 container (`scripts/arm64-test.sh`, which also checks the glibc limit). It ends with
 `all checks passed`. `SKIP_ARM=1 scripts/check.sh` skips the container run
 while you iterate. It needs Docker, `cargo-audit` and the Windows target
-(`rustup target add x86_64-pc-windows-msvc`). The advisories `cargo audit` accepts for now are
-listed, with the reason, in `.cargo/audit.toml`.
+(`rustup target add x86_64-pc-windows-msvc`). The advisories that `cargo audit`
+accepts for now are listed, with the reason, in `.cargo/audit.toml`.
 
 ### Golden files
 

@@ -84,7 +84,7 @@
 
 <p>The capture is opened first, and then privileges are dropped (see <a href="#PRIVILEGES">&quot;PRIVILEGES&quot;</a>). Every byte that arrives is treated as hostile: text that came off the wire is escaped before it is printed, so a device cannot send terminal control sequences to you.</p>
 
-<p>Only Ethernet is decoded, with any number of 802.1Q or 802.1ad (QinQ) VLAN tags. Other link types are refused.</p>
+<p>Only Ethernet is decoded, with up to four 802.1Q or 802.1ad (QinQ) VLAN tags; a frame with more is shown as malformed (<code>too many VLAN tags</code>). Other link types are refused.</p>
 
 <h1 id="OPTIONS">OPTIONS</h1>
 
@@ -100,6 +100,8 @@
 <dd>
 
 <p>Read packets from a pcap or pcapng file instead of capturing. <b>-r -</b> reads the capture from standard input. Times are then shown with the date.</p>
+
+<p>A read from standard input cannot be interrupted. On a pipe that has gone quiet, Ctrl-C ends the run only when more data or the end of the input arrives; press Ctrl-C a second time to stop at once. In the full-screen view (<b>-t -r -</b>), <b>q</b> likewise takes effect only when more data or the end of the input arrives.</p>
 
 </dd>
 <dt id="j"><b>-j</b></dt>
@@ -202,7 +204,7 @@ or (icmp6 and ip6[40] &gt;= 133 and ip6[40] &lt;= 137)</code></pre>
 <pre><code>WARN   a warning (see WARNINGS)
 NOTE   a baseline just learned: &quot;expected DHCP server ... (learned)&quot;</code></pre>
 
-<p>Taken from the sample captures that ship with the tests (the DHCP scenario, which has one rogue server and one server on VLAN 100):</p>
+<p>Taken from the sample captures that ship with the tests (the DHCP scenario, which has rogue servers and one server on VLAN 100):</p>
 
 <pre><code>2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 &quot;host-a&quot;
 2026-11-21 13:02:11.250 DHCP  192.168.1.1        OFFER 192.168.1.50 to 02:00:5e:10:00:39
@@ -307,7 +309,7 @@ NOTE   a baseline just learned: &quot;expected DHCP server ... (learned)&quot;</
 <dt id="problems"><code>problems</code></dt>
 <dd>
 
-<p>Only present when the packet was damaged or odd: an array of objects with <code>layer</code>, <code>reason</code>, <code>offset</code> (into the frame) and <code>hex</code> (up to 32 bytes starting at that offset). The rest of the packet is still decoded as far as possible.</p>
+<p>Only present when the packet was damaged or odd: an array of objects with <code>layer</code>, <code>reason</code>, <code>offset</code> (into the frame) and <code>hex</code> (all the bytes the problem covers, starting at that offset; verbose output shows at most 32 of them). The rest of the packet is still decoded as far as possible.</p>
 
 </dd>
 <dt id="frame_hex"><code>frame_hex</code></dt>
@@ -488,7 +490,7 @@ NOTE   a baseline just learned: &quot;expected DHCP server ... (learned)&quot;</
 
 {&quot;schema&quot;:1,&quot;type&quot;:&quot;baseline&quot;,&quot;ts&quot;:1795266131.250000,&quot;time&quot;:&quot;2026-11-21T13:02:11.250+00:00&quot;,&quot;segment&quot;:&quot;untagged&quot;,&quot;what&quot;:&quot;router&quot;,&quot;ip&quot;:&quot;fe80::1&quot;,&quot;mac&quot;:&quot;02:00:5e:10:00:01&quot;}
 
-{&quot;schema&quot;:1,&quot;type&quot;:&quot;status&quot;,&quot;final&quot;:true,&quot;packets&quot;:11,&quot;kernel_drops&quot;:0,&quot;channel_drops&quot;:0,&quot;devices&quot;:4,&quot;evictions&quot;:0}</code></pre>
+{&quot;schema&quot;:1,&quot;type&quot;:&quot;status&quot;,&quot;final&quot;:true,&quot;packets&quot;:13,&quot;kernel_drops&quot;:0,&quot;channel_drops&quot;:0,&quot;devices&quot;:6,&quot;evictions&quot;:0}</code></pre>
 
 <h1 id="WARNINGS">WARNINGS</h1>
 
@@ -628,6 +630,8 @@ router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers and a global 
 <pre><code>overhear -i eth0 host 192.168.1.1 and udp port 67</code></pre>
 
 <p>and not <code>host router.example</code>.</p>
+
+<p>The user named with <b>-Z</b> (or <code>nobody</code>) is looked up when overhear is started as root, through the system&#39;s user database (NSS, see nsswitch.conf(5)). With a network source such as LDAP or SSSD configured there, that lookup may send queries too.</p>
 
 <h1 id="PRIVILEGES">PRIVILEGES</h1>
 

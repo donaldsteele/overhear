@@ -35,8 +35,9 @@ The capture is opened first, and then privileges are dropped
 came off the wire is escaped before it is printed, so a device cannot send
 terminal control sequences to you.
 
-Only Ethernet is decoded, with any number of 802.1Q or 802.1ad (QinQ) VLAN tags.
-Other link types are refused.
+Only Ethernet is decoded, with up to four 802.1Q or 802.1ad (QinQ) VLAN tags; a
+frame with more is shown as malformed (C<too many VLAN tags>). Other link types
+are refused.
 
 =head1 OPTIONS
 
@@ -51,6 +52,11 @@ capture device is used. B<-i> and B<-r> cannot be combined.
 
 Read packets from a pcap or pcapng file instead of capturing. B<-r -> reads
 the capture from standard input. Times are then shown with the date.
+
+A read from standard input cannot be interrupted. On a pipe that has gone quiet,
+Ctrl-C ends the run only when more data or the end of the input arrives; press
+Ctrl-C a second time to stop at once. In the full-screen view (B<-t -r ->),
+B<q> likewise takes effect only when more data or the end of the input arrives.
 
 =item B<-j>
 
@@ -158,8 +164,8 @@ caused them:
     WARN   a warning (see WARNINGS)
     NOTE   a baseline just learned: "expected DHCP server ... (learned)"
 
-Taken from the sample captures that ship with the tests (the DHCP scenario, which has one
-rogue server and one server on VLAN 100):
+Taken from the sample captures that ship with the tests (the DHCP scenario, which has
+rogue servers and one server on VLAN 100):
 
     2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 "host-a"
     2026-11-21 13:02:11.250 DHCP  192.168.1.1        OFFER 192.168.1.50 to 02:00:5e:10:00:39
@@ -265,9 +271,9 @@ there is no protocol member.
 =item C<problems>
 
 Only present when the packet was damaged or odd: an array of objects with
-C<layer>, C<reason>, C<offset> (into the frame) and C<hex> (up to 32 bytes starting at
-that offset). The
-rest of the packet is still decoded as far as possible.
+C<layer>, C<reason>, C<offset> (into the frame) and C<hex> (all the bytes the
+problem covers, starting at that offset; verbose output shows at most 32 of them).
+The rest of the packet is still decoded as far as possible.
 
 =item C<frame_hex>
 
@@ -470,7 +476,7 @@ A frame too short for Ethernet:
 
     {"schema":1,"type":"baseline","ts":1795266131.250000,"time":"2026-11-21T13:02:11.250+00:00","segment":"untagged","what":"router","ip":"fe80::1","mac":"02:00:5e:10:00:01"}
 
-    {"schema":1,"type":"status","final":true,"packets":11,"kernel_drops":0,"channel_drops":0,"devices":4,"evictions":0}
+    {"schema":1,"type":"status","final":true,"packets":13,"kernel_drops":0,"channel_drops":0,"devices":6,"evictions":0}
 
 =head1 WARNINGS
 
@@ -657,6 +663,11 @@ port numbers only:
     overhear -i eth0 host 192.168.1.1 and udp port 67
 
 and not C<host router.example>.
+
+The user named with B<-Z> (or C<nobody>) is looked up when overhear is started
+as root, through the system's user database (NSS, see nsswitch.conf(5)). With
+a network source such as LDAP or SSSD configured there, that lookup may send
+queries too.
 
 =head1 PRIVILEGES
 
