@@ -7,6 +7,7 @@ overhear - passively listen to a LAN and report who is there
 =head1 SYNOPSIS
 
 B<overhear> [B<-i> I<iface> | B<-r> I<file>] [B<-j> | B<-t> | B<-v>] [B<-H>] [B<-p>] [B<-Z> I<user>]
+[B<--proto> I<name>[,I<name>...]]
 [B<--dhcp-server> I<IP>[@I<VLAN>]] [B<--router> I<MAC|IPV6>[@I<VLAN>]]
 [B<--max-memory> I<size>] [I<filter> ...]
 
@@ -88,6 +89,33 @@ When started as root, switch to this user once the capture is open
 (default: C<nobody>). Ignored, with a note, when not started as root.
 See L</PRIVILEGES>.
 
+=item B<--proto> I<name>[,I<name>...]
+
+Capture only these protocols. Names are separated by commas and may be written
+in any case; the option may be given several times, and a protocol named twice
+counts once. Each name adds an expression to the capture filter:
+
+    name    also          capture filter expression
+    arp                   arp
+    dhcp                  udp port 67 or udp port 68
+    nd      ndp, ipv6-nd  icmp6 and ip6[40] >= 133
+                            and ip6[40] <= 137
+    mdns                  udp port 5353
+    llmnr                 udp port 5355
+    nbns    netbios       udp port 137
+    ssdp                  udp port 1900
+    lldp                  ether proto 0x88cc
+    cdp                   ether dst 01:00:0c:cc:cc:cc
+    stp                   ether dst 01:80:c2:00:00:00
+
+The expressions of the protocols named are joined with B<or> and narrow the
+built-in filter, so the kernel passes only those frames. This works with every
+output (lines, B<-v>, B<-j> and B<-t>), live and with B<-r>, and the device table
+and the warnings see only those protocols. B<--proto> combines with I<filter>
+words: a frame must match both (see L</Capture filter>). An unknown or empty
+name is an error, and the message lists the known names. Like every option,
+B<--proto> goes before the filter words.
+
 =item B<--dhcp-server> I<IP>[@I<VLAN>]
 
 A DHCP server you expect. May be given several times (a failover pair, or one
@@ -116,7 +144,8 @@ and addresses separated by tabs), and exit.
 =item I<filter> ...
 
 Extra capture filter words in pcap-filter(7) syntax. They are joined with
-the built-in filter by B<and>; see L</Capture filter>.
+the built-in filter by B<and>; see L</Capture filter>. Everything from the first
+filter word on is part of the filter, so options must come before it.
 
 =item B<-h>, B<--help>, B<-V>, B<--version>
 
@@ -142,6 +171,13 @@ Filter words you give are joined to that with B<and>, for the untagged, the
 tagged and the QinQ arm alike. This narrows what is shown; it can never widen it.
 For example C<overhear -i eth0 host 192.168.1.1> shows only traffic to or from
 that host that the built-in filter also accepts.
+
+B<--proto> narrows the built-in filter in the same way, with the expressions of
+the protocols named joined by B<or>. Given filter words as well, a frame must
+match both: C<overhear -i eth0 --proto dhcp host 192.168.1.1> shows only DHCP
+to or from that host. A combination that can match nothing, such as
+C<--proto nd host 192.168.1.1> (IPv6 neighbour discovery and an IPv4 address),
+is refused by libpcap with C<expression rejects all packets>.
 
 Limit: the filter looks through at most two VLAN tags. Unicast frames with
 B<three> or more tags may therefore be missed, and with filter words so may
@@ -769,6 +805,14 @@ Read a recording, and show only what concerns one host:
 A recording from tcpdump, read from a pipe:
 
     tcpdump -i eth0 -w - -s 0 | overhear -r -
+
+Only DHCP and mDNS:
+
+    overhear -i eth0 --proto dhcp,mdns
+
+Only DHCP to or from one server (B<--proto> and filter words together):
+
+    overhear -i eth0 --proto dhcp host 192.168.1.1
 
 Expect one DHCP server on all VLANs, and a different one on VLAN 20:
 

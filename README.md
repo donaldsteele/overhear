@@ -80,10 +80,11 @@ no privileges at all: `overhear -r file.pcap`, or `-r -` for standard input.
 Common uses:
 
 ```
-overhear -i eth0                 one line per packet
-overhear -t -i eth0              full-screen device list (q quits, / filters, s sorts)
-overhear -v -i eth0              every decoded field
-overhear -j -i eth0              JSON lines
+overhear -i eth0                      one line per packet
+overhear -t -i eth0                   full-screen device list (q quits, / filters, s sorts)
+overhear -v -i eth0                   every decoded field
+overhear -j -i eth0                   JSON lines
+overhear -i eth0 --proto dhcp,mdns    only DHCP and mDNS
 overhear -i eth0 --dhcp-server 192.168.1.1 --router 02:00:5e:10:00:01
 overhear -i eth0 --max-memory 16M
 overhear -i eth0 host 192.168.1.20
@@ -92,7 +93,20 @@ overhear -i eth0 host 192.168.1.20
 Extra words at the end of the command line are a capture filter, joined to the
 built-in one with "and". They can only narrow what is shown. The built-in filter
 accepts broadcast and multicast frames, ARP, and the DHCP, NetBIOS, SSDP,
-mDNS and LLMNR ports, and IPv6 neighbour discovery.
+mDNS and LLMNR ports, and IPv6 neighbour discovery. Options go before the
+filter words: everything from the first filter word on is part of the filter.
+
+`--proto` narrows the capture to the protocols you name, separated by commas:
+`arp`, `dhcp`, `nd`, `mdns`, `llmnr`, `nbns`, `ssdp`, `lldp`, `cdp` and `stp`
+(`ndp` and `ipv6-nd` also name `nd`, and `netbios` names `nbns`). It can be
+repeated, works with every output, live and with `-r`, and the device table and
+the warnings then see only those protocols. With filter words as well, a frame
+has to match both:
+
+```
+overhear -i eth0 --proto dhcp,mdns                DHCP and mDNS only
+overhear -i eth0 --proto dhcp host 192.168.1.1    only DHCP to or from 192.168.1.1
+```
 
 Two things to know about filters:
 

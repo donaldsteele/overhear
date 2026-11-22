@@ -70,7 +70,7 @@
 
 <h1 id="SYNOPSIS">SYNOPSIS</h1>
 
-<p><b>overhear</b> [<b>-i</b> <i>iface</i> | <b>-r</b> <i>file</i>] [<b>-j</b> | <b>-t</b> | <b>-v</b>] [<b>-H</b>] [<b>-p</b>] [<b>-Z</b> <i>user</i>] [<b>--dhcp-server</b> <i>IP</i>[@<i>VLAN</i>]] [<b>--router</b> <i>MAC|IPV6</i>[@<i>VLAN</i>]] [<b>--max-memory</b> <i>size</i>] [<i>filter</i> ...]</p>
+<p><b>overhear</b> [<b>-i</b> <i>iface</i> | <b>-r</b> <i>file</i>] [<b>-j</b> | <b>-t</b> | <b>-v</b>] [<b>-H</b>] [<b>-p</b>] [<b>-Z</b> <i>user</i>] [<b>--proto</b> <i>name</i>[,<i>name</i>...]] [<b>--dhcp-server</b> <i>IP</i>[@<i>VLAN</i>]] [<b>--router</b> <i>MAC|IPV6</i>[@<i>VLAN</i>]] [<b>--max-memory</b> <i>size</i>] [<i>filter</i> ...]</p>
 
 <p><b>overhear</b> <b>-D</b></p>
 
@@ -140,6 +140,27 @@
 <p>When started as root, switch to this user once the capture is open (default: <code>nobody</code>). Ignored, with a note, when not started as root. See <a href="#PRIVILEGES">&quot;PRIVILEGES&quot;</a>.</p>
 
 </dd>
+<dt id="proto-name-name"><b>--proto</b> <i>name</i>[,<i>name</i>...]</dt>
+<dd>
+
+<p>Capture only these protocols. Names are separated by commas and may be written in any case; the option may be given several times, and a protocol named twice counts once. Each name adds an expression to the capture filter:</p>
+
+<pre><code>name    also          capture filter expression
+arp                   arp
+dhcp                  udp port 67 or udp port 68
+nd      ndp, ipv6-nd  icmp6 and ip6[40] &gt;= 133
+                        and ip6[40] &lt;= 137
+mdns                  udp port 5353
+llmnr                 udp port 5355
+nbns    netbios       udp port 137
+ssdp                  udp port 1900
+lldp                  ether proto 0x88cc
+cdp                   ether dst 01:00:0c:cc:cc:cc
+stp                   ether dst 01:80:c2:00:00:00</code></pre>
+
+<p>The expressions of the protocols named are joined with <b>or</b> and narrow the built-in filter, so the kernel passes only those frames. This works with every output (lines, <b>-v</b>, <b>-j</b> and <b>-t</b>), live and with <b>-r</b>, and the device table and the warnings see only those protocols. <b>--proto</b> combines with <i>filter</i> words: a frame must match both (see <a href="#Capture-filter">&quot;Capture filter&quot;</a>). An unknown or empty name is an error, and the message lists the known names. Like every option, <b>--proto</b> goes before the filter words.</p>
+
+</dd>
 <dt id="dhcp-server-IP-VLAN"><b>--dhcp-server</b> <i>IP</i>[@<i>VLAN</i>]</dt>
 <dd>
 
@@ -167,7 +188,7 @@
 <dt id="filter"><i>filter</i> ...</dt>
 <dd>
 
-<p>Extra capture filter words in pcap-filter(7) syntax. They are joined with the built-in filter by <b>and</b>; see <a href="#Capture-filter">&quot;Capture filter&quot;</a>.</p>
+<p>Extra capture filter words in pcap-filter(7) syntax. They are joined with the built-in filter by <b>and</b>; see <a href="#Capture-filter">&quot;Capture filter&quot;</a>. Everything from the first filter word on is part of the filter, so options must come before it.</p>
 
 </dd>
 <dt id="h---help--V---version"><b>-h</b>, <b>--help</b>, <b>-V</b>, <b>--version</b></dt>
@@ -190,6 +211,8 @@ or (icmp6 and ip6[40] &gt;= 133 and ip6[40] &lt;= 137)</code></pre>
 <p>(that is: broadcast and multicast frames, ARP, DHCP, NetBIOS name service, SSDP, mDNS, LLMNR, and the five IPv6 neighbour discovery message types). The same expression is also applied to frames carrying one VLAN tag and to frames carrying two (QinQ), because the pcap <b>vlan</b> keyword shifts everything after it.</p>
 
 <p>Filter words you give are joined to that with <b>and</b>, for the untagged, the tagged and the QinQ arm alike. This narrows what is shown; it can never widen it. For example <code>overhear -i eth0 host 192.168.1.1</code> shows only traffic to or from that host that the built-in filter also accepts.</p>
+
+<p><b>--proto</b> narrows the built-in filter in the same way, with the expressions of the protocols named joined by <b>or</b>. Given filter words as well, a frame must match both: <code>overhear -i eth0 --proto dhcp host 192.168.1.1</code> shows only DHCP to or from that host. A combination that can match nothing, such as <code>--proto nd host 192.168.1.1</code> (IPv6 neighbour discovery and an IPv4 address), is refused by libpcap with <code>expression rejects all packets</code>.</p>
 
 <p>Limit: the filter looks through at most two VLAN tags. Unicast frames with <b>three</b> or more tags may therefore be missed, and with filter words so may broadcast and multicast frames with three or more tags.</p>
 
@@ -721,6 +744,14 @@ p            pause the table</code></pre>
 <p>A recording from tcpdump, read from a pipe:</p>
 
 <pre><code>tcpdump -i eth0 -w - -s 0 | overhear -r -</code></pre>
+
+<p>Only DHCP and mDNS:</p>
+
+<pre><code>overhear -i eth0 --proto dhcp,mdns</code></pre>
+
+<p>Only DHCP to or from one server (<b>--proto</b> and filter words together):</p>
+
+<pre><code>overhear -i eth0 --proto dhcp host 192.168.1.1</code></pre>
 
 <p>Expect one DHCP server on all VLANs, and a different one on VLAN 20:</p>
 
