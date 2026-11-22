@@ -9,6 +9,7 @@ mod nd;
 pub mod oui;
 mod pcap;
 pub mod scenarios;
+mod ssdp;
 
 pub use arp::arp;
 pub use dhcp::DhcpMsg;
@@ -17,3 +18,4 @@ pub use frames::*;
 pub use nbns::{nb_encode, nbns};
 pub use nd::*;
 pub use pcap::*;
+pub use ssdp::ssdp;

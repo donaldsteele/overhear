@@ -536,6 +536,70 @@ fn nbns_scenario() -> Vec<TFrame> {
     stamp(f)
 }
 
+fn ssdp_scenario() -> Vec<TFrame> {
+    const MCAST: [u8; 6] = [0x01, 0x00, 0x5e, 0x7f, 0xff, 0xfa];
+    const TV: &str = "urn:schemas-upnp-org:device:MediaRenderer:1";
+    const DESC: &str = "http://192.168.1.33:8008/ssdp/device-desc.xml";
+    let group = Ipv4Addr::new(239, 255, 255, 250);
+    let multicast = |src: u8, payload: &[u8]| {
+        let ip = ipv4_udp(ip(src), group, 1900, 1900, payload);
+        (eth_ipv4(MCAST, mac(src), &ip), None)
+    };
+    let mut f = Vec::new();
+    let notify = |nts: &str| {
+        ssdp(
+            "NOTIFY * HTTP/1.1",
+            &[
+                ("HOST", "239.255.255.250:1900"),
+                ("CACHE-CONTROL", "max-age=1800"),
+                ("LOCATION", DESC),
+                ("NT", TV),
+                ("NTS", nts),
+                ("SERVER", "Linux/4.4 UPnP/1.0 Chromecast/1.0"),
+                (
+                    "USN",
+                    "uuid:2f402f80-da50-11e1-9b23-001788::urn:schemas-upnp-org:device:MediaRenderer:1",
+                ),
+            ],
+        )
+    };
+    f.push(multicast(0x33, &notify("ssdp:alive")));
+    f.push(multicast(0x33, &notify("ssdp:byebye")));
+    f.push(multicast(
+        0x20,
+        &ssdp(
+            "M-SEARCH * HTTP/1.1",
+            &[
+                ("HOST", "239.255.255.250:1900"),
+                ("MAN", "\"ssdp:discover\""),
+                ("MX", "2"),
+                ("ST", "ssdp:all"),
+            ],
+        ),
+    ));
+    let reply = |src: u8, server: &str| {
+        let b = ssdp(
+            "HTTP/1.1 200 OK",
+            &[
+                ("CACHE-CONTROL", "max-age=1800"),
+                ("ST", TV),
+                ("LOCATION", DESC),
+                ("SERVER", server),
+            ],
+        );
+        let ip = ipv4_udp(ip(src), ip(0x20), 1900, 50000, &b);
+        (eth_ipv4(mac(0x20), mac(src), &ip), None)
+    };
+    f.push(reply(0x33, "Linux/4.4 UPnP/1.0 Chromecast/1.0"));
+    // A SERVER value with a terminal escape in it.
+    f.push(reply(0x34, "Evil\u{1b}[2J/1.0 UPnP/1.0"));
+    // 65 headers: the first 64 are kept.
+    let names: Vec<String> = (1..=65).map(|i| format!("X-H{i}")).collect();
+    let hs: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), "v")).collect();
+    f.push(multicast(0x35, &ssdp("NOTIFY * HTTP/1.1", &hs)));
+    stamp(f)
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
     vec![
@@ -545,5 +609,6 @@ pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
         ("nd", nd_scenario()),
         ("mdns", mdns_scenario()),
         ("llmnr_nbns", nbns_scenario()),
+        ("ssdp", ssdp_scenario()),
     ]
 }

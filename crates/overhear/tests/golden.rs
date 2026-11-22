@@ -134,3 +134,8 @@ fn mdns() {
 fn llmnr_nbns() {
     golden("llmnr_nbns");
 }
+
+#[test]
+fn ssdp() {
+    golden("ssdp");
+}

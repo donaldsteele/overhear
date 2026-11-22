@@ -23,6 +23,7 @@ mod nbns;
 mod nd;
 mod packet;
 mod problem;
+mod ssdp;
 
 pub use arp::{Arp, ArpKind, parse as parse_arp};
 pub use cursor::Cursor;
@@ -37,3 +38,4 @@ pub use nbns::{NbName, NbQuestion, NbRecord, Nbns, nb_entries, parse as parse_nb
 pub use nd::{Nd, NdOpt, parse as parse_nd};
 pub use packet::{Decoded, L4, Packet, Proto, UdpHeader, decode};
 pub use problem::{Layer, Problem};
+pub use ssdp::{MAX_HEADERS, MAX_LINE, Ssdp, StartLine, parse as parse_ssdp};

@@ -1,0 +1,127 @@
+2026-11-21 13:02:11.000  373 bytes
+  ETH   02:00:5e:10:00:33 → 01:00:5e:7f:ff:fa  type 0x0800
+  IPv4  192.168.1.51 → 239.255.255.250  ttl 64 proto 17
+  UDP   1900 → 1900  len 339
+  SSDP  NOTIFY
+        HOST: 239.255.255.250:1900
+        CACHE-CONTROL: max-age=1800
+        LOCATION: http://192.168.1.33:8008/ssdp/device-desc.xml
+        NT: urn:schemas-upnp-org:device:MediaRenderer:1
+        NTS: ssdp:alive
+        SERVER: Linux/4.4 UPnP/1.0 Chromecast/1.0
+        USN: uuid:2f402f80-da50-11e1-9b23-001788::urn:schemas-upnp-org:device:MediaRenderer:1
+
+2026-11-21 13:02:11.250  374 bytes
+  ETH   02:00:5e:10:00:33 → 01:00:5e:7f:ff:fa  type 0x0800
+  IPv4  192.168.1.51 → 239.255.255.250  ttl 64 proto 17
+  UDP   1900 → 1900  len 340
+  SSDP  NOTIFY
+        HOST: 239.255.255.250:1900
+        CACHE-CONTROL: max-age=1800
+        LOCATION: http://192.168.1.33:8008/ssdp/device-desc.xml
+        NT: urn:schemas-upnp-org:device:MediaRenderer:1
+        NTS: ssdp:byebye
+        SERVER: Linux/4.4 UPnP/1.0 Chromecast/1.0
+        USN: uuid:2f402f80-da50-11e1-9b23-001788::urn:schemas-upnp-org:device:MediaRenderer:1
+
+2026-11-21 13:02:11.500  136 bytes
+  ETH   02:00:5e:10:00:20 → 01:00:5e:7f:ff:fa  type 0x0800
+  IPv4  192.168.1.32 → 239.255.255.250  ttl 64 proto 17
+  UDP   1900 → 1900  len 102
+  SSDP  M-SEARCH
+        HOST: 239.255.255.250:1900
+        MAN: "ssdp:discover"
+        MX: 2
+        ST: ssdp:all
+
+2026-11-21 13:02:11.750  239 bytes
+  ETH   02:00:5e:10:00:33 → 02:00:5e:10:00:20  type 0x0800
+  IPv4  192.168.1.51 → 192.168.1.32  ttl 64 proto 17
+  UDP   1900 → 50000  len 205
+  SSDP  response 200
+        CACHE-CONTROL: max-age=1800
+        ST: urn:schemas-upnp-org:device:MediaRenderer:1
+        LOCATION: http://192.168.1.33:8008/ssdp/device-desc.xml
+        SERVER: Linux/4.4 UPnP/1.0 Chromecast/1.0
+
+2026-11-21 13:02:12.000  227 bytes
+  ETH   02:00:5e:10:00:34 → 02:00:5e:10:00:20  type 0x0800
+  IPv4  192.168.1.52 → 192.168.1.32  ttl 64 proto 17
+  UDP   1900 → 50000  len 193
+  SSDP  response 200
+        CACHE-CONTROL: max-age=1800
+        ST: urn:schemas-upnp-org:device:MediaRenderer:1
+        LOCATION: http://192.168.1.33:8008/ssdp/device-desc.xml
+        SERVER: Evil\x1b[2J/1.0 UPnP/1.0
+
+2026-11-21 13:02:12.250  704 bytes
+  ETH   02:00:5e:10:00:35 → 01:00:5e:7f:ff:fa  type 0x0800
+  IPv4  192.168.1.53 → 239.255.255.250  ttl 64 proto 17
+  UDP   1900 → 1900  len 670
+  SSDP  NOTIFY
+        X-H1: v
+        X-H2: v
+        X-H3: v
+        X-H4: v
+        X-H5: v
+        X-H6: v
+        X-H7: v
+        X-H8: v
+        X-H9: v
+        X-H10: v
+        X-H11: v
+        X-H12: v
+        X-H13: v
+        X-H14: v
+        X-H15: v
+        X-H16: v
+        X-H17: v
+        X-H18: v
+        X-H19: v
+        X-H20: v
+        X-H21: v
+        X-H22: v
+        X-H23: v
+        X-H24: v
+        X-H25: v
+        X-H26: v
+        X-H27: v
+        X-H28: v
+        X-H29: v
+        X-H30: v
+        X-H31: v
+        X-H32: v
+        X-H33: v
+        X-H34: v
+        X-H35: v
+        X-H36: v
+        X-H37: v
+        X-H38: v
+        X-H39: v
+        X-H40: v
+        X-H41: v
+        X-H42: v
+        X-H43: v
+        X-H44: v
+        X-H45: v
+        X-H46: v
+        X-H47: v
+        X-H48: v
+        X-H49: v
+        X-H50: v
+        X-H51: v
+        X-H52: v
+        X-H53: v
+        X-H54: v
+        X-H55: v
+        X-H56: v
+        X-H57: v
+        X-H58: v
+        X-H59: v
+        X-H60: v
+        X-H61: v
+        X-H62: v
+        X-H63: v
+        X-H64: v
+  !     ssdp: too many headers at 692: 582d4836353a2076
+

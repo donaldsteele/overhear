@@ -6,6 +6,7 @@ pub mod dns;
 pub mod nbns;
 pub mod nd;
 pub mod other;
+pub mod ssdp;
 
 use overhear_decode::{Packet, Proto};
 
@@ -24,6 +25,7 @@ pub fn tag(p: &Packet<'_>) -> &'static str {
         Proto::Mdns(_) => Flavor::Mdns.tag(),
         Proto::Llmnr(_) => Flavor::Llmnr.tag(),
         Proto::Nbns(_) => nbns::tag(),
+        Proto::Ssdp(_) => ssdp::tag(),
     }
 }
 
@@ -37,6 +39,7 @@ pub fn summary(p: &Packet<'_>, out: &mut String) {
         Proto::Mdns(m) => dns::summary(m, out),
         Proto::Llmnr(m) => dns::llmnr_summary(m, out),
         Proto::Nbns(m) => nbns::summary(m, out),
+        Proto::Ssdp(m) => ssdp::summary(m, out),
     }
 }
 
@@ -50,6 +53,7 @@ pub fn verbose(p: &Packet<'_>, frame: &[u8], out: &mut String) {
         Proto::Mdns(m) => dns::verbose(Flavor::Mdns, m, out),
         Proto::Llmnr(m) => dns::verbose(Flavor::Llmnr, m, out),
         Proto::Nbns(m) => nbns::verbose(m, out),
+        Proto::Ssdp(m) => ssdp::verbose(m, out),
     }
 }
 
@@ -63,6 +67,7 @@ pub fn json_name(p: &Packet<'_>) -> &'static str {
         Proto::Mdns(_) => Flavor::Mdns.json_key(),
         Proto::Llmnr(_) => Flavor::Llmnr.json_key(),
         Proto::Nbns(_) => "nbns",
+        Proto::Ssdp(_) => "ssdp",
     }
 }
 
@@ -76,6 +81,7 @@ pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
         Proto::Mdns(m) => dns::json(Flavor::Mdns, m, w),
         Proto::Llmnr(m) => dns::json(Flavor::Llmnr, m, w),
         Proto::Nbns(m) => nbns::json(m, w),
+        Proto::Ssdp(m) => ssdp::json(m, w),
     }
 }
 
@@ -89,5 +95,6 @@ pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
         Proto::Mdns(m) => dns::observe(p, m, out),
         Proto::Llmnr(m) => dns::llmnr_observe(p, m, out),
         Proto::Nbns(m) => nbns::observe(p, m, out),
+        Proto::Ssdp(m) => ssdp::observe(p, m, out),
     }
 }

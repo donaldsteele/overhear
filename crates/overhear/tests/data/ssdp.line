@@ -1,0 +1,6 @@
+2026-11-21 13:02:11.000 SSDP  192.168.1.51       alive urn:schemas-upnp-org:device:MediaRenderer:1
+2026-11-21 13:02:11.250 SSDP  192.168.1.51       byebye urn:schemas-upnp-org:device:MediaRenderer:1
+2026-11-21 13:02:11.500 SSDP  192.168.1.32       search ssdp:all
+2026-11-21 13:02:11.750 SSDP  192.168.1.51       response urn:schemas-upnp-org:device:MediaRenderer:1 at http://192.168.1.33:8008/ssdp/device-desc.xml
+2026-11-21 13:02:12.000 SSDP  192.168.1.52       response urn:schemas-upnp-org:device:MediaRenderer:1 at http://192.168.1.33:8008/ssdp/device-desc.xml
+2026-11-21 13:02:12.250 SSDP  192.168.1.53       notify [malformed: ssdp too many headers]

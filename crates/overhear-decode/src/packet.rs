@@ -1,7 +1,7 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
 use crate::{
-    Arp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Nbns, Nd, Problem, arp, dhcp, dns,
-    ethernet, nbns, nd,
+    Arp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Nbns, Nd, Problem, Ssdp, arp, dhcp,
+    dns, ethernet, nbns, nd, ssdp,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +26,7 @@ pub enum Proto<'a> {
     Mdns(DnsMessage<'a>),
     Llmnr(DnsMessage<'a>),
     Nbns(Nbns<'a>),
+    Ssdp(Ssdp<'a>),
     Other { payload: &'a [u8] },
 }
 
@@ -64,6 +65,9 @@ fn dispatch_udp<'a>(
         }
         IpHeader::V4(_) if udp.src_port == 137 || udp.dst_port == 137 => {
             nbns::parse(c, problems).map(Proto::Nbns)
+        }
+        _ if udp.src_port == 1900 || udp.dst_port == 1900 => {
+            ssdp::parse(c, problems).map(Proto::Ssdp)
         }
         _ if udp.src_port == 5355 || udp.dst_port == 5355 => {
             dns::parse(c, problems).map(Proto::Llmnr)
@@ -560,5 +564,29 @@ mod name_service_tests {
         let ip6 = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 137, 137, &b);
         let f = eth_ipv6(mac(1), mac(2), &ip6);
         assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod ssdp_tests {
+    use super::*;
+    use overhear_testgen::*;
+    use std::net::{Ipv4Addr, Ipv6Addr};
+
+    #[test]
+    fn ssdp_dispatch_on_port_1900_over_v4_and_v6() {
+        let b = ssdp("M-SEARCH * HTTP/1.1", &[("ST", "ssdp:all")]);
+        let a = Ipv4Addr::new(10, 0, 0, 5);
+        let ip4 = ipv4_udp(a, Ipv4Addr::new(239, 255, 255, 250), 50000, 1900, &b);
+        let ip6 = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 1900, 50000, &b);
+        for f in [
+            eth_ipv4(mac(1), mac(2), &ip4),
+            eth_ipv6(mac(1), mac(2), &ip6),
+        ] {
+            let p = decode(&f).unwrap();
+            assert!(matches!(&p.proto, Proto::Ssdp(m) if m.headers.len() == 1));
+            assert!(p.problems.is_empty());
+        }
     }
 }

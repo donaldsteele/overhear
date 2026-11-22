@@ -53,4 +53,11 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "ssdp"
+path = "fuzz_targets/ssdp.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
