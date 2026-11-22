@@ -4,6 +4,9 @@ use crate::{Cursor, Layer, Problem};
 
 /// The longest line accepted, terminator excluded.
 pub const MAX_LINE: usize = 1024;
+/// The most "bad header line" problems reported per message; further bad
+/// lines are skipped silently.
+pub const MAX_BAD_LINES: usize = 8;
 /// The most headers kept.
 pub const MAX_HEADERS: usize = 64;
 
@@ -84,6 +87,7 @@ pub fn parse<'a>(c: &mut Cursor<'a>, problems: &mut Vec<Problem>) -> Option<Ssdp
     let mut pos = 0usize;
     let mut start = None;
     let mut headers = Vec::new();
+    let mut bad = 0usize;
     while pos < data.len() {
         let tail = data.get(pos..).unwrap_or(&[]);
         let nl = tail.iter().position(|&b| b == b'\n');
@@ -117,12 +121,15 @@ pub fn parse<'a>(c: &mut Cursor<'a>, problems: &mut Vec<Problem>) -> Option<Ssdp
             (!name.is_empty()).then_some((name, value))
         });
         let Some((name, value)) = parts else {
-            problems.push(Problem {
-                layer: Layer::Ssdp,
-                reason: "bad header line",
-                offset,
-                len: line.len(),
-            });
+            bad = bad.saturating_add(1);
+            if bad <= MAX_BAD_LINES {
+                problems.push(Problem {
+                    layer: Layer::Ssdp,
+                    reason: "bad header line",
+                    offset,
+                    len: line.len(),
+                });
+            }
             continue;
         };
         if headers.len() >= MAX_HEADERS {
@@ -256,6 +263,18 @@ mod tests {
         assert_eq!(reasons(&p), vec!["bad header line", "bad header line"]);
         assert_eq!(p[0].offset, 19);
         assert_eq!(p[0].len, 13);
+    }
+
+    #[test]
+    fn many_bad_lines_are_capped() {
+        let mut b = b"NOTIFY * HTTP/1.1\r\n".to_vec();
+        for _ in 0..10_000 {
+            b.extend_from_slice(b"x\n");
+        }
+        b.extend_from_slice(b"NT: after\r\n");
+        let (m, p) = run(&b);
+        assert_eq!(p.len(), MAX_BAD_LINES);
+        assert_eq!(m.unwrap().header("nt"), Some(&b"after"[..]));
     }
 
     #[test]

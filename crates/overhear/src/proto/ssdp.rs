@@ -98,6 +98,9 @@ pub fn json(m: &Ssdp<'_>, w: &mut JsonWriter) {
     if let StartLine::Response { status } = m.start {
         w.u64(Some("status"), u64::from(status));
     }
+    if let StartLine::Other(line) = m.start {
+        w.text("line", line, TextKind::Ascii);
+    }
     w.arr(Some("headers"));
     for (name, value) in &m.headers {
         w.obj(None);
@@ -327,6 +330,21 @@ mod tests {
         assert_eq!(
             s,
             "  SSDP  response 200\n        ST: a\n        X-Evil: b\\x1bc\n"
+        );
+    }
+
+    #[test]
+    fn json_other_start_keeps_the_line() {
+        let s = with(1, b"SUBSCRIBE x\r\n\r\n", |_, m| {
+            let mut w = JsonWriter::new();
+            w.obj(None);
+            json(m, &mut w);
+            w.end();
+            w.as_str().to_string()
+        });
+        assert_eq!(
+            s,
+            r#"{"ssdp":{"start":"other","line":"SUBSCRIBE x","headers":[]}}"#
         );
     }
 
