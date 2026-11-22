@@ -3,3 +3,5 @@
 /fuzz/artifacts
 /dist
 /.cache
+/fuzz/corpus/*
+!/fuzz/corpus/decode/

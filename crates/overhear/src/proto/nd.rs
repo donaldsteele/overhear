@@ -382,6 +382,11 @@ pub fn observe<'a>(p: &Packet<'a>, nd: &Nd<'a>, out: &mut Vec<Observation<'a>>) 
         mac: p.eth.src,
         proto: ProtoTag::Nd,
     });
+    // RFC 4861: a hop limit other than 255 means the packet may be off-link
+    // and is ignored; it is shown but teaches nothing.
+    if matches!(p.ip, Some(IpHeader::V6(h)) if h.hop_limit != 255) {
+        return;
+    }
     let src = ip_src(p).filter(|s| !s.is_unspecified());
     for o in nd.opts() {
         let (mac, owner) = match (o, nd) {
@@ -626,6 +631,28 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn hop_limit_not_255_only_heard() {
+        let t = a6("2001:db8:1::50");
+        for icmp in [
+            nd_ra(1800, 0, &[opt_lla(1, mac(1)), opt_prefix(t, 64, 0x40)]),
+            nd_na(0x60, t, &[opt_lla(2, mac(4))]),
+        ] {
+            let o = with(&icmp, 4, ll(4), 64, |p, nd| {
+                let mut o = Vec::new();
+                observe(p, nd, &mut o);
+                o.into_iter().map(own).collect::<Vec<_>>()
+            });
+            assert_eq!(
+                o,
+                vec![Observation::Heard {
+                    mac: Mac(mac(4)),
+                    proto: ProtoTag::Nd
+                }]
+            );
+        }
     }
 
     #[test]
