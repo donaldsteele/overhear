@@ -117,7 +117,7 @@ fn main() -> ExitCode {
             ),
             None => args.iface.clone().unwrap_or_else(|| "default".into()),
         };
-        return match tui::run(src, &mut engine, stop, label, live) {
+        return match tui::run(src, &mut engine, stop, label, live, text) {
             Ok(RunEnd::Done | RunEnd::Closed) => ExitCode::SUCCESS,
             Ok(RunEnd::Truncated(_)) => fail(format!(
                 "{}: truncated capture file",

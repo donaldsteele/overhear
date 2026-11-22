@@ -9,52 +9,34 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
-pub use app::{App, TuiRenderer};
+pub use app::{App, Sort, TuiRenderer};
 pub use view::draw;
 
 use crate::engine::{Engine, RunEnd, RunError};
 use crate::pipeline::{self, Flow, PipelineOpts, run_threaded};
-use crate::render::Renderer;
+use crate::render::{Renderer, TextOpts};
 use crate::source::Source;
-use crate::warn::Output;
+use crate::track::Tracker;
 
-/// Like [`TuiRenderer`], but shares the [`App`] with the hook, which draws
-/// from it while the pipeline owns the renderer.
-struct SharedRenderer<'a>(&'a RefCell<App>);
-
-impl Renderer for SharedRenderer<'_> {
-    fn packet(
-        &mut self,
-        _: &crate::source::Frame,
-        _: &overhear_decode::Decoded<'_>,
-    ) -> io::Result<()> {
-        Ok(())
-    }
-
-    fn output(&mut self, o: &Output) -> io::Result<()> {
-        self.0.borrow_mut().push_output(o);
-        Ok(())
-    }
-}
-
-fn clock_now() -> String {
-    let now = jiff::Timestamp::now().to_zoned_datetime(jiff::tz::TimeZone::system());
+fn clock_now(tz: &jiff::tz::TimeZone) -> String {
+    let now = jiff::Timestamp::now().to_zoned_datetime(tz.clone());
     now.strftime("%H:%M:%S").to_string()
 }
 
 /// Reads pending keys; true when the user asked to quit. A resize asks for
 /// a redraw.
-fn poll_keys(app: &RefCell<App>) -> io::Result<bool> {
+fn poll_keys(app: &RefCell<App>, tracker: &Tracker) -> io::Result<bool> {
     while event::poll(Duration::ZERO)? {
         match event::read()? {
             Event::Key(k) if k.kind != KeyEventKind::Release => {
-                let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-                match k.code {
-                    KeyCode::Char('q') if !ctrl => return Ok(true),
-                    KeyCode::Char('c') if ctrl => return Ok(true),
-                    _ => {}
+                let mut a = app.borrow_mut();
+                let flow = a.on_key(k, tracker);
+                // A key changes what is on screen.
+                a.request_redraw();
+                if flow == Flow::Stop {
+                    return Ok(true);
                 }
             }
             Event::Resize(..) => app.borrow_mut().request_redraw(),
@@ -66,7 +48,8 @@ fn poll_keys(app: &RefCell<App>) -> io::Result<bool> {
 
 /// Runs the live screen until `q`, Ctrl-C, `stop`, or the pipeline fails.
 /// `live` is true for a capture from an interface, false for a recording
-/// (see [`PipelineOpts::wall_clock`]).
+/// (see [`PipelineOpts::wall_clock`]). `text` formats the recent lines of
+/// the detail view.
 /// The terminal is restored on every path out.
 pub fn run(
     src: Box<dyn Source>,
@@ -74,19 +57,21 @@ pub fn run(
     stop: Arc<AtomicBool>,
     label: String,
     live: bool,
+    text: TextOpts,
 ) -> Result<RunEnd, RunError> {
     // `init` would panic on failure; `try_init` also installs the panic hook
     // that restores the terminal.
     let mut terminal = ratatui::try_init().map_err(RunError::Io)?;
     let app = RefCell::new(App::new(label));
-    let mut renderer = SharedRenderer(&app);
+    let mut renderer = TuiRenderer::new(&app, text);
     let mut hook = |engine: &mut Engine, _: &mut dyn Renderer| -> io::Result<Flow> {
-        if poll_keys(&app)? {
+        if poll_keys(&app, engine.tracker())? {
             return Ok(Flow::Stop);
         }
         if app.borrow_mut().should_draw(Instant::now()) {
             let app = app.borrow();
-            terminal.draw(|f| draw(f, &app, engine.tracker(), &clock_now()))?;
+            let clock = clock_now(&app.tz);
+            terminal.draw(|f| draw(f, &app, engine.tracker(), &clock))?;
         }
         Ok(Flow::Continue)
     };
@@ -118,17 +103,18 @@ mod tests {
     fn dhcp_capture_frame() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/dhcp.pcap");
         let src = FileSource::open(&path).expect("open pcap");
+        let text = TextOpts {
+            tz: TimeZone::UTC,
+            style: TimeStyle::DateTime,
+            hex: false,
+        };
         let mut engine = Engine::new(Config {
-            text: TextOpts {
-                tz: TimeZone::UTC,
-                style: TimeStyle::DateTime,
-                hex: false,
-            },
+            text: text.clone(),
             max_memory: 1 << 20,
             pins: Pins::default(),
         });
         let app = RefCell::new(App::new("dhcp.pcap".into()));
-        let mut renderer = SharedRenderer(&app);
+        let mut renderer = TuiRenderer::new(&app, text);
         let opts = PipelineOpts {
             buffers: pipeline::BUFFERS,
             linger_after_end: false,
@@ -160,5 +146,12 @@ mod tests {
         println!("{s}");
         assert!(s.contains("second DHCP server"), "{s}");
         assert!(app.total_warnings >= 1);
+        // Packet lines were filed under their sources for the detail view.
+        let t = engine.tracker();
+        assert!(
+            t.table
+                .iter()
+                .any(|d| app.recent_lines(&d.mac).next().is_some())
+        );
     }
 }
