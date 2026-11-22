@@ -7,8 +7,10 @@
 #   scripts/site-samples.sh --check    compare only; exit 1 on any difference
 #
 # A sample sits between <!-- sample:NAME --> and <!-- /sample:NAME --> in
-# index.html. Each command below runs in crates/overhear/tests/data with
-# TZ=UTC, as shown, and its output (standard error included) is HTML-escaped.
+# index.html. Each command below runs with TZ=UTC, as shown, in a directory
+# holding the captures of crates/overhear/tests/data and lan.pcap, six of
+# them merged in time order by `testgen merge`. Its output (standard error
+# included) is HTML-escaped.
 # The live-screen sample is drawn by the live_frame example with the same
 # code as `overhear -t`. When it changes, retake site/assets/screens/live.png.
 set -euo pipefail
@@ -26,6 +28,7 @@ done
 
 cargo build --release -q -p overhear
 cargo build --release -q -p overhear --example live_frame
+cargo build --release -q -p overhear-testgen
 
 root=$PWD
 data=crates/overhear/tests/data
@@ -34,6 +37,12 @@ trap 'rm -rf "$work"' EXIT
 # "overhear" in the commands is the release binary just built.
 mkdir "$work/bin"
 ln -s "$root/target/release/overhear" "$work/bin/overhear"
+# The captures the commands read: the test captures, and lan.pcap holding
+# the same six, in the same order, as the live-screen sample.
+run=$work/run
+mkdir "$run"
+ln -s "$root/$data"/*.pcap "$run/"
+"$root/target/release/testgen" merge "$run/lan.pcap" dhcp nd mdns llmnr_nbns lldp_cdp stp
 export TZ=UTC LC_ALL=C.UTF-8
 
 esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
@@ -44,7 +53,7 @@ sample() {
   {
     printf '<span class="p">$ </span>'
     printf '%s\n' "$cmd" | esc
-    (cd "$data" && PATH="$work/bin:$PATH" bash -c "set -o pipefail; $cmd" 2>&1) | esc
+    (cd "$run" && PATH="$work/bin:$PATH" bash -c "set -o pipefail; $cmd" 2>&1) | esc
   } >>"$work/$name"
 }
 
@@ -58,6 +67,18 @@ sample pins 'overhear -r dhcp.pcap --dhcp-server 192.168.1.1 --dhcp-server 10.9.
 sample jq "overhear -j -r dhcp.pcap | jq -c 'select(.type != \"packet\")'"
 sample jq "overhear -j -r dhcp.pcap | jq -r 'select(.rule == \"second-dhcp-server\") | \"\\(.subject) \\(.macs[0])\"'"
 sample jq "overhear -j -r dhcp.pcap | jq -rs 'map(select(.type == \"packet\") | .src.mac // empty) | unique | group_by(.[:8])[] | \"\\(length) \\(.[0][:8])\"'"
+
+# The recipes, over lan.pcap.
+sample recipe-proto 'overhear -r lan.pcap --proto dhcp,mdns'
+sample recipe-rogue 'overhear -r lan.pcap --proto dhcp --dhcp-server 192.168.1.1'
+sample recipe-routers 'overhear -r lan.pcap --proto nd --router fe80::1'
+sample recipe-poison 'overhear -r lan.pcap --proto llmnr,nbns'
+sample recipe-wiring 'overhear -r lan.pcap --proto lldp,cdp,stp'
+sample recipe-jq "overhear -j -r lan.pcap | jq -r 'select(.type == \"warning\") | .message'"
+sample recipe-jq "overhear -j -r lan.pcap | jq -r 'select(.type == \"packet\") | .proto' | sort | uniq -c"
+sample recipe-jq "overhear -j -r lan.pcap --proto dhcp |
+  jq -r 'select(.dhcp.op == 1) | \"\\(.dhcp.chaddr) \\(.dhcp.options[] | select(.code == 12) | .value)\"' |
+  sort -u"
 
 # The live screen, sorted by name, over six captures read in time order.
 (cd "$data" && "$root/target/release/examples/live_frame" lan.pcap 100 26 name \

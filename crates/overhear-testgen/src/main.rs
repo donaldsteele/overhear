@@ -4,7 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use overhear_testgen::{
-    flood, inject, oui::gen_oui, pcap_stream, perfgen, scenarios::scenarios, write_pcap,
+    flood, inject,
+    oui::gen_oui,
+    pcap_stream, perfgen,
+    scenarios::{merged, scenarios},
+    write_pcap,
 };
 
 fn gen_samples(data_dir: &Path, corpus_dir: &Path) -> std::io::Result<()> {
@@ -153,8 +157,25 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         },
+        [cmd, out, names @ ..] if cmd == "merge" && !names.is_empty() => {
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            match merged(&names) {
+                Ok(frames) => match write_pcap(Path::new(out), &frames) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(e) => {
+                        eprintln!("testgen: {out}: {e}");
+                        ExitCode::FAILURE
+                    }
+                },
+                Err(e) => {
+                    eprintln!("testgen: {e}");
+                    ExitCode::from(2)
+                }
+            }
+        }
         _ => {
             eprintln!("usage: testgen gen-samples <data-dir> <corpus-dir>");
+            eprintln!("       testgen merge <out.pcap> <scenario...>   (in time order)");
             eprintln!("       testgen flood <frames>");
             eprintln!("       testgen perfgen <out.pcap> <frames>");
             eprintln!("       testgen inject <iface> <pcap...> [--rate PPS] [--seconds S]");

@@ -24,7 +24,7 @@
 <header class="top">
 <div class="wrap">
 <a class="brand" href="#top"><img src="icon.svg" width="32" height="32" alt="">overhear</a>
-<nav aria-label="Sections"><a href="#why">Why</a><a href="#tour" class="opt">Tour</a><a href="#warnings" class="opt">Warnings</a><a href="#usage">Usage</a><a href="#download">Download</a><a href="#good-to-know" class="opt">Good to know</a></nav>
+<nav aria-label="Sections"><a href="#why">Why</a><a href="#tour" class="opt">Tour</a><a href="#warnings" class="opt">Warnings</a><a href="#usage">Usage</a><a href="#recipes" class="opt">Recipes</a><a href="#download">Download</a><a href="#good-to-know" class="opt">Good to know</a></nav>
 </div>
 </header>
 <main id="main">
@@ -219,7 +219,8 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 <div class="power">
 <div>
 <p>Point it at an interface, or at a recording made with tcpdump or Wireshark. Reading a file needs no privileges at all.</p>
-<p>Extra words at the end are a capture filter in <a href="https://www.tcpdump.org/manpages/pcap-filter.7.html">pcap-filter</a> syntax, joined to the built-in filter with <em>and</em>: they can only narrow what is shown. Write addresses and ports as numbers, because names in a filter are looked up by libpcap.</p>
+<p>Extra words at the end are a capture filter in <a href="https://www.tcpdump.org/manpages/pcap-filter.7.html">pcap-filter</a> syntax, joined to the built-in filter with <em>and</em>: they can only narrow what is shown. Write addresses and ports as numbers, because names in a filter are looked up by libpcap. Options go before the filter words.</p>
+<p>To hear only some protocols, name them with <code>--proto</code>; the <a href="#recipes">recipes</a> below show it at work.</p>
 <p>Every option, rule and JSON field is in <a href="manual.html">the manual</a>, also installed as <code>man overhear</code>.</p>
 </div>
 <pre class="term" role="region" tabindex="0" aria-label="Common command lines"><code><span class="c"># one line per packet (as root, it then runs as nobody)</span>
@@ -231,6 +232,9 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 
 <span class="c"># only what concerns one host</span>
 <span class="p">$ </span>overhear -i eth0 host 192.168.1.20
+
+<span class="c"># only DHCP and mDNS</span>
+<span class="p">$ </span>overhear -i eth0 --proto dhcp,mdns
 
 <span class="c"># JSON lines, warnings only</span>
 <span class="p">$ </span>overhear -j -i eth0 | jq -c 'select(.type == "warning")'
@@ -254,6 +258,7 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 <tr><td><code>-H</code></td><td>Add a hex dump of each frame, or a <code>frame_hex</code> member in JSON.</td></tr>
 <tr><td><code>-p</code></td><td>Do not put the interface in promiscuous mode.</td></tr>
 <tr><td><code>-Z USER</code></td><td>When started as root, the user to switch to once the capture is open (default <code>nobody</code>).</td></tr>
+<tr><td><code>--proto</code> <code>NAMES</code></td><td>Only these protocols, separated by commas: <code>arp</code>, <code>dhcp</code>, <code>nd</code>, <code>mdns</code>, <code>llmnr</code>, <code>nbns</code>, <code>ssdp</code>, <code>lldp</code>, <code>cdp</code>, <code>stp</code>. Repeatable, and joined to filter words with <em>and</em>.</td></tr>
 <tr><td><code>--dhcp-server</code> <code>IP[@VLAN]</code></td><td>A DHCP server you expect. Repeat it for a failover pair or one server per VLAN.</td></tr>
 <tr><td><code>--router</code> <code>MAC|IPV6[@VLAN]</code></td><td>An IPv6 router you expect, by MAC or link-local address. Repeatable.</td></tr>
 <tr><td><code>--max-memory</code> <code>SIZE</code></td><td>The budget for what overhear remembers, with a <code>K</code>, <code>M</code> or <code>G</code> suffix. Default <code>64M</code>, at least <code>4M</code>.</td></tr>
@@ -281,8 +286,171 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 </div>
 </div></section>
 
+<section id="recipes"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>06 / Recipes</span></p><h2>Ask a narrower question.</h2></div>
+<p class="prose intro">Each recipe gives the command for a live interface, then the same options over <code>lan.pcap</code>: six of the test captures (DHCP, IPv6 neighbour discovery, mDNS, LLMNR and NetBIOS, LLDP and CDP, spanning tree) merged in time order, the same capture the live screen above shows. The output is real.</p>
+<article class="row wide"><div class="lead"><div><span class="tag">01 / two protocols</span><h3>Only DHCP and mDNS</h3></div><div><p>Name the protocols you care about, separated by commas. Everything else is filtered out before overhear decodes it, so the lines, the warnings and the device count cover only those protocols.</p><p>Here the neighbour discovery, LLMNR, NetBIOS, LLDP, CDP and spanning tree frames in the capture are gone. <code>--proto</code> works the same with <code>-v</code>, <code>-j</code> and <code>-t</code>.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="Only DHCP and mDNS from a mixed capture"><code><span class="c"># on the LAN</span>
+<span class="p">$ </span>sudo overhear -i eth0 --proto dhcp,mdns
+
+<span class="c"># the same over the test capture</span>
+<!-- sample:recipe-proto --><span class="p">$ </span>overhear -r lan.pcap --proto dhcp,mdns
+2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 "host-a"
+2026-11-21 13:02:11.000 mDNS  192.168.1.32       query _googlecast._tcp.local PTR
+2026-11-21 13:02:11.250 DHCP  192.168.1.1        OFFER 192.168.1.50 to 02:00:5e:10:00:39
+2026-11-21 13:02:11.250 NOTE  expected DHCP server 192.168.1.1 (learned)
+2026-11-21 13:02:11.250 mDNS  192.168.1.33       Living-Room-TV._googlecast._tcp.local (+3 records)
+2026-11-21 13:02:11.500 DHCP  192.168.1.254      OFFER 192.168.1.51 to 02:00:5e:10:00:39
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+2026-11-21 13:02:11.500 mDNS  192.168.1.33       goodbye Living-Room-TV._googlecast._tcp.local
+2026-11-21 13:02:11.750 DHCP  02:00:5e:10:00:39  REQUEST 192.168.1.50 by 02:00:5e:10:00:39 "host-a"
+2026-11-21 13:02:11.750 mDNS  192.168.1.48       printer.local → 192.168.1.48
+2026-11-21 13:02:12.000 DHCP  192.168.1.1        ACK 192.168.1.50 to 02:00:5e:10:00:39
+2026-11-21 13:02:12.000 mDNS  192.168.1.49       printer.local → 192.168.1.49
+2026-11-21 13:02:12.000 WARN  name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30
+2026-11-21 13:02:12.250 DHCP  192.168.1.1        NAK to 02:00:5e:10:00:39
+2026-11-21 13:02:12.250 mDNS  192.168.1.34       query &lt;bad name&gt; PTR [malformed: dns compression pointer does not point backwards]
+2026-11-21 13:02:12.500 DHCP  10.9.9.1           [100] OFFER 10.9.9.50 to 02:00:5e:10:00:3a
+2026-11-21 13:02:12.500 NOTE  [100] expected DHCP server 10.9.9.9 (learned)
+2026-11-21 13:02:12.500 mDNS  192.168.1.64       Evil\x1b[2J\u{202e}Name._airplay._tcp.local
+2026-11-21 13:02:12.750 DHCP  192.168.1.1        OFFER 192.168.1.52 to 02:00:5e:10:00:39
+2026-11-21 13:02:12.750 mDNS  192.168.1.65       Bjørn's iPhone._companion-link._tcp.local
+2026-11-21 13:02:13.000 DHCP  192.168.1.1        OFFER 192.168.1.53 to 02:00:5e:10:00:39 [malformed: dhcp truncated]
+2026-11-21 13:02:13.250 DHCP  192.168.1.1        ACK 192.168.1.54 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.500 DHCP  192.168.1.1        ACK 192.168.1.55 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.750 DHCP  192.168.1.253      OFFER 192.168.1.56 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)
+2026-11-21 13:02:14.000 DHCP  192.168.1.252      [0] OFFER 192.168.1.57 to 02:00:5e:10:00:39
+2026-11-21 13:02:14.000 WARN  second DHCP server 192.168.1.252 (expected 192.168.1.1)
+overhear: 21 packets, 0 dropped by the kernel, 0 dropped by overhear, 13 devices<!-- /sample:recipe-proto --></code></pre></article>
+<article class="row wide"><div class="lead"><div><span class="tag">02 / rogue DHCP</span><h3>Watch for rogue DHCP servers</h3></div><div><p>Pin the DHCP server you run and listen to DHCP alone. With a pin nothing is learned, so there is no <code>NOTE</code> line, and every other server that offers, acknowledges or refuses an address gets a <code>WARN</code>, on any VLAN.</p><p>Here three rogue servers answer on the untagged network, and the server on VLAN 100 is flagged too, until a second pin, <code>--dhcp-server 10.9.9.9@100</code>, names it.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="DHCP only, with the expected server pinned"><code><span class="c"># on the LAN</span>
+<span class="p">$ </span>sudo overhear -i eth0 --proto dhcp --dhcp-server 192.168.1.1
+
+<span class="c"># the same over the test capture</span>
+<!-- sample:recipe-rogue --><span class="p">$ </span>overhear -r lan.pcap --proto dhcp --dhcp-server 192.168.1.1
+2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 "host-a"
+2026-11-21 13:02:11.250 DHCP  192.168.1.1        OFFER 192.168.1.50 to 02:00:5e:10:00:39
+2026-11-21 13:02:11.500 DHCP  192.168.1.254      OFFER 192.168.1.51 to 02:00:5e:10:00:39
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+2026-11-21 13:02:11.750 DHCP  02:00:5e:10:00:39  REQUEST 192.168.1.50 by 02:00:5e:10:00:39 "host-a"
+2026-11-21 13:02:12.000 DHCP  192.168.1.1        ACK 192.168.1.50 to 02:00:5e:10:00:39
+2026-11-21 13:02:12.250 DHCP  192.168.1.1        NAK to 02:00:5e:10:00:39
+2026-11-21 13:02:12.500 DHCP  10.9.9.1           [100] OFFER 10.9.9.50 to 02:00:5e:10:00:3a
+2026-11-21 13:02:12.500 WARN  [100] second DHCP server 10.9.9.9 (expected 192.168.1.1)
+2026-11-21 13:02:12.750 DHCP  192.168.1.1        OFFER 192.168.1.52 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.000 DHCP  192.168.1.1        OFFER 192.168.1.53 to 02:00:5e:10:00:39 [malformed: dhcp truncated]
+2026-11-21 13:02:13.250 DHCP  192.168.1.1        ACK 192.168.1.54 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.500 DHCP  192.168.1.1        ACK 192.168.1.55 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.750 DHCP  192.168.1.253      OFFER 192.168.1.56 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)
+2026-11-21 13:02:14.000 DHCP  192.168.1.252      [0] OFFER 192.168.1.57 to 02:00:5e:10:00:39
+2026-11-21 13:02:14.000 WARN  second DHCP server 192.168.1.252 (expected 192.168.1.1)
+overhear: 13 packets, 0 dropped by the kernel, 0 dropped by overhear, 6 devices<!-- /sample:recipe-rogue --></code></pre></article>
+<article class="row wide"><div class="lead"><div><span class="tag">03 / IPv6 routers</span><h3>IPv6 routers, pinned</h3></div><div><p><code>nd</code> keeps the five neighbour discovery messages: router solicitations and adverts, neighbour solicitations and adverts, and redirects. Pin the router you expect, by MAC or link-local address.</p><p>A router advert with a default route from anyone else is high severity; one without a default route that still hands out DNS servers or a global prefix is low. Two MACs claiming one IPv6 address show up here too.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="Neighbour discovery only, with the expected router pinned"><code><span class="c"># on the LAN</span>
+<span class="p">$ </span>sudo overhear -i eth0 --proto nd --router fe80::1
+
+<span class="c"># the same over the test capture</span>
+<!-- sample:recipe-routers --><span class="p">$ </span>overhear -r lan.pcap --proto nd --router fe80::1
+2026-11-21 13:02:11.000 ND    fe80::9            router solicitation
+2026-11-21 13:02:11.250 ND    fe80::1            router advert lifetime 1800s prefix 2001:db8:1::/64 dns 2001:db8::53
+2026-11-21 13:02:11.500 ND    fe80::2            router advert lifetime 0 (not a default router) prefix fd00:1::/64
+2026-11-21 13:02:11.750 ND    fe80::2            router advert lifetime 0 (not a default router) dns 2001:db8::53
+2026-11-21 13:02:11.750 WARN  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
+2026-11-21 13:02:12.000 ND    fe80::3            router advert lifetime 600s
+2026-11-21 13:02:12.000 WARN  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
+2026-11-21 13:02:12.250 ND    02:00:5e:10:00:06  duplicate address check for 2001:db8:1::60
+2026-11-21 13:02:12.500 ND    fe80::6            2001:db8:1::60 is-at 02:00:5e:10:00:06 (unsolicited)
+2026-11-21 13:02:12.750 ND    fe80::4            2001:db8:1::50 is-at 02:00:5e:10:00:04
+2026-11-21 13:02:42.750 ND    fe80::5            2001:db8:1::50 is-at 02:00:5e:10:00:05
+2026-11-21 13:02:42.750 WARN  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago
+2026-11-21 13:02:43.000 ND    fe80::7            neighbour solicitation for 2001:db8:1::50 [malformed: nd hop limit not 255 (invalid neighbour discovery)]
+2026-11-21 13:02:43.250 ND    fe80::8            router solicitation [malformed: nd zero-length option]
+overhear: 11 packets, 0 dropped by the kernel, 0 dropped by overhear, 9 devices<!-- /sample:recipe-routers --></code></pre></article>
+<article class="row wide"><div class="lead"><div><span class="tag">04 / name poisoning</span><h3>Watch for name poisoning</h3></div><div><p>When DNS has no answer, Windows asks the whole LAN over LLMNR and NetBIOS, and anyone may reply. Poisoning tools such as Responder reply to every such query with their own address, to catch the logins that follow.</p><p>One device answering for three different names is a high warning; two devices answering for the same name, a low one.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="LLMNR and NetBIOS only"><code><span class="c"># on the LAN</span>
+<span class="p">$ </span>sudo overhear -i eth0 --proto llmnr,nbns
+
+<span class="c"># the same over the test capture</span>
+<!-- sample:recipe-poison --><span class="p">$ </span>overhear -r lan.pcap --proto llmnr,nbns
+2026-11-21 13:02:11.000 LLMNR 192.168.1.32       query wpad A
+2026-11-21 13:02:11.250 LLMNR 192.168.1.102      wpad → 192.168.1.102
+2026-11-21 13:02:11.500 LLMNR 192.168.1.102      fileserver → 192.168.1.102
+2026-11-21 13:02:11.750 LLMNR 192.168.1.102      printer → 192.168.1.102
+2026-11-21 13:02:11.750 WARN  02:00:5e:10:00:66 answers LLMNR queries for many names (wpad, fileserver, printer): the pattern of poisoning tools such as Responder
+2026-11-21 13:02:12.000 NBNS  192.168.1.80       register WORKSTATION1&lt;00&gt; 192.168.1.80
+2026-11-21 13:02:12.250 NBNS  192.168.1.80       register HOME&lt;00&gt; 192.168.1.80
+2026-11-21 13:02:12.500 NBNS  192.168.1.32       query FILESERVER&lt;20&gt;
+2026-11-21 13:02:12.750 NBNS  192.168.1.64       FILESERVER&lt;20&gt; is 192.168.1.64
+2026-11-21 13:02:13.000 NBNS  192.168.1.65       FILESERVER&lt;20&gt; is 192.168.1.65
+2026-11-21 13:02:13.000 WARN  name FILESERVER&lt;20&gt; answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40
+2026-11-21 13:02:13.250 NBNS  192.168.1.34       query [malformed: nbns bad NetBIOS name encoding]
+2026-11-21 13:02:13.500 NBNS  192.168.1.35       query EVIL\x1b[2JNAME&lt;20&gt;
+overhear: 11 packets, 0 dropped by the kernel, 0 dropped by overhear, 7 devices<!-- /sample:recipe-poison --></code></pre></article>
+<article class="row wide"><div class="lead"><div><span class="tag">05 / wiring</span><h3>Switches and wiring</h3></div><div><p>Switches, access points and phones announce their name, what they are and the port the frame left from, over LLDP or Cisco's CDP. Spanning tree names the root bridge and each bridge's cost to reach it, and reports topology changes.</p><p>Plugged into a switch port, this tells you which switch and port you are on, and which bridge is the root of the tree.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="LLDP, CDP and spanning tree only"><code><span class="c"># on the LAN</span>
+<span class="p">$ </span>sudo overhear -i eth0 --proto lldp,cdp,stp
+
+<span class="c"># the same over the test capture</span>
+<!-- sample:recipe-wiring --><span class="p">$ </span>overhear -r lan.pcap --proto lldp,cdp,stp
+2026-11-21 13:02:11.000 LLDP  02:00:5e:10:00:60  core-sw1 port Gi1/0/24 bridge router
+2026-11-21 13:02:11.000 STP   02:00:5e:10:00:50  STP root 8000.00:11:22:33:44:01 cost 4 bridge 8000.02:00:5e:10:00:50 port 0x8001
+2026-11-21 13:02:11.250 LLDP  02:00:5e:10:00:61  ap-lobby port eth0 ap
+2026-11-21 13:02:11.250 STP   02:00:5e:10:00:51  RSTP root 8000.00:11:22:33:44:01 cost 20000 bridge 9001.02:00:5e:10:00:51 port 0x8002 TC
+2026-11-21 13:02:11.500 LLDP  02:00:5e:10:00:62  desk-phone-17 port 1 phone
+2026-11-21 13:02:11.500 STP   02:00:5e:10:00:51  topology change notification
+2026-11-21 13:02:11.750 CDP   02:00:5e:10:00:63  dist-sw2.example.net port GigabitEthernet1/0/1 platform cisco WS-C2960X-48TS-L
+2026-11-21 13:02:11.750 STP   02:00:5e:10:00:52  MSTP root 8000.00:11:22:33:44:01 cost 20000 bridge a001.02:00:5e:10:00:52 port 0x8003 (2 MSTIs)
+2026-11-21 13:02:12.000 LLDP  02:00:5e:10:00:64  02:00:5e:10:00:64 port Gi0/1 [malformed: lldp truncated]
+2026-11-21 13:02:12.000 LLC   02:00:5e:10:00:53  dsap 0x42 ssap 0x42 → 01:80:c2:00:00:00 [malformed: stp truncated]
+2026-11-21 13:02:12.250 LLDP  02:00:5e:10:00:65  evil\x1b[2Jsw port Gi0/2
+overhear: 11 packets, 0 dropped by the kernel, 0 dropped by overhear, 10 devices<!-- /sample:recipe-wiring --></code></pre></article>
+<article class="row wide"><div class="lead"><div><span class="tag">06 / jq</span><h3>Three questions for jq</h3></div><div><p>Every warning as one line, how many packets each protocol sent, and the host names DHCP clients gave. The one <code>other</code> packet is a damaged spanning tree frame.</p><p>A client sends its host name as option 12 in its DHCP requests (<code>op</code> 1). <code>--proto dhcp</code> keeps the JSON to DHCP before <code>jq</code> sees it.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="jq one-liners over the mixed capture"><code><!-- sample:recipe-jq --><span class="p">$ </span>overhear -j -r lan.pcap | jq -r 'select(.type == "warning") | .message'
+second DHCP server 192.168.1.254 (expected 192.168.1.1)
+router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
+02:00:5e:10:00:66 answers LLMNR queries for many names (wpad, fileserver, printer): the pattern of poisoning tools such as Responder
+unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
+name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30
+name FILESERVER&lt;20&gt; answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40
+second DHCP server 192.168.1.253 (expected 192.168.1.1)
+second DHCP server 192.168.1.252 (expected 192.168.1.1)
+2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago
+<span class="p">$ </span>overhear -j -r lan.pcap | jq -r 'select(.type == "packet") | .proto' | sort | uniq -c
+      1 cdp
+     13 dhcp
+      5 lldp
+      4 llmnr
+      8 mdns
+      7 nbns
+     11 nd
+      1 other
+      4 stp
+<span class="p">$ </span>overhear -j -r lan.pcap --proto dhcp |
+  jq -r 'select(.dhcp.op == 1) | "\(.dhcp.chaddr) \(.dhcp.options[] | select(.code == 12) | .value)"' |
+  sort -u
+02:00:5e:10:00:39 host-a<!-- /sample:recipe-jq --></code></pre></article>
+<article class="row"><div><span class="tag">07 / a log</span><h3>Keep a log on a Pi</h3><p>On a Pi on a mirror port (see below), append JSON lines to a file and ask <code>jq</code> about them whenever you like. After the <code>setcap</code> step overhear needs no <code>sudo</code>.</p><p>Written straight to a file, lines are saved a few kilobytes at a time, so on a quiet network <code>tail -f</code> can lag. Through a pipe every line goes out at once, as with <code>tee</code> in the last command.</p></div>
+<pre class="term" role="region" tabindex="0" aria-label="Keeping a JSON log"><code><span class="c"># keep every line, as JSON</span>
+<span class="p">$ </span>overhear -j -i eth0 &gt;&gt; lan.jsonl
+
+<span class="c"># follow the warnings from another terminal</span>
+<span class="p">$ </span>tail -f lan.jsonl | jq -r 'select(.type == "warning") | .message'
+
+<span class="c"># or keep the log and see each warning at once</span>
+<span class="p">$ </span>overhear -j -i eth0 | tee -a lan.jsonl |
+    jq -r 'select(.type == "warning") | .message'</code></pre></article>
+<article class="row flip"><div><span class="tag">08 / recordings</span><h3>Read a tcpdump recording</h3><p>Record on the machine that can see the traffic, and read the file anywhere. Reading needs no privileges, and every option works on a file as it does live; times then include the date.</p><p>With <code>-Z "$USER"</code> tcpdump switches to your user before it opens the file, so the file is yours and lands where you can write. Recordings from Wireshark work too, pcap or pcapng.</p></div>
+<pre class="term" role="region" tabindex="0" aria-label="Recording with tcpdump and reading the file"><code><span class="c"># record; Ctrl-C stops it</span>
+<span class="p">$ </span>sudo tcpdump -i eth0 -s 0 -Z "$USER" -w lan.pcap
+
+<span class="c"># read it later, anywhere, without sudo</span>
+<span class="p">$ </span>overhear -r lan.pcap --proto dhcp -v</code></pre></article>
+</div></section>
+
 <section id="pi"><div class="wrap">
-<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>06 / Raspberry Pi</span></p><h2>A Pi on a mirror port.</h2></div>
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>07 / Raspberry Pi</span></p><h2>A Pi on a mirror port.</h2></div>
 <div class="power">
 <div>
 <p>Mirror (SPAN) the switch ports you care about to one port, and plug a Raspberry Pi 4 running Raspberry Pi OS 64-bit into it.</p>
@@ -315,7 +483,7 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 </div></section>
 
 <section id="download"><div class="wrap">
-<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>07 / Download</span></p><h2>Version 0.1.0.</h2></div>
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>08 / Download</span></p><h2>Version 0.1.0.</h2></div>
 <div class="dl">
 <div class="card"><h3>amd64</h3><p class="req">Debian 12 or later</p><ul><li>.deb for 64-bit PCs and servers</li><li>Needs libpcap 1.10 or later</li></ul><a class="btn" href="https://github.com/donaldsteele/overhear/releases/latest">Get the amd64 .deb</a></div>
 <div class="card"><h3>arm64</h3><p class="req">Raspberry Pi OS 64-bit, Debian 12 or later</p><ul><li>.deb for 64-bit Arm boards</li><li>Tested under arm64 emulation</li></ul><a class="btn" href="https://github.com/donaldsteele/overhear/releases/latest">Get the arm64 .deb</a></div>
@@ -342,7 +510,7 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 </div></section>
 
 <section id="good-to-know"><div class="wrap">
-<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>08 / Good to know</span></p><h2>The honest list.</h2></div>
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>09 / Good to know</span></p><h2>The honest list.</h2></div>
 <ol class="good">
 <li><span>On a switch, a passive listener hears broadcasts and multicasts, not unicast traffic between other devices. DHCP ACKs to a client elsewhere and ARP replies go unseen, and a device that never broadcasts is not seen at all. Listen on a mirror port, a tap or a hub to see more.</span></li>
 <li><span>The capture filter looks through at most two VLAN tags (QinQ). Unicast frames with three or more tags may be missed, and with filter words so may broadcasts and multicasts with three or more tags.</span></li>

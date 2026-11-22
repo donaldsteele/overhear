@@ -151,6 +151,8 @@ section { padding: 88px 0 0; }
 }
 .row h3 { font-size: 1.75rem; margin-bottom: 12px; }
 .row p { color: var(--ink-2); max-width: 52ch; }
+/* a short flag such as -j must not break after its hyphen */
+.row p code { white-space: nowrap; }
 .lead { display: grid; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) { .lead { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; } }
 .lead p { max-width: 60ch; }
