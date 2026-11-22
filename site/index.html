@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>overhear - hear what your LAN announces</title>
+<meta name="description" content="overhear is a free, open-source passive listener for your local network. It decodes what devices announce, keeps a table of who is there, and warns about rogue DHCP servers, unexpected IPv6 routers, address conflicts and name poisoning. It never transmits.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="overhear - hear what your LAN announces">
+<meta property="og:description" content="A passive LAN listener for Linux. Who is on your network, what they announce, and what looks wrong. It never sends a packet.">
+<meta property="og:image" content="https://donaldsteele.github.io/overhear/assets/screens/live.png">
+<meta property="og:url" content="https://donaldsteele.github.io/overhear/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500..700;1,9..144,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+<div class="wrap">
+<a class="brand" href="#top"><img src="icon.svg" width="32" height="32" alt="">overhear</a>
+<nav aria-label="Sections"><a href="#why">Why</a><a href="#tour" class="opt">Tour</a><a href="#warnings" class="opt">Warnings</a><a href="#usage">Usage</a><a href="#download">Download</a><a href="#good-to-know" class="opt">Good to know</a></nav>
+</div>
+</header>
+<main id="main">
+<div class="hero" id="top">
+<div class="wrap">
+<div>
+<p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>Free and open source, MIT</span></p>
+<h1><span class="name">overhear:</span> hear what your LAN <em>announces.</em></h1>
+<p class="lede">A passive listener for your local network. It decodes what every device tells everybody, keeps a table of who is there, and warns when something looks wrong.</p>
+<div class="cta"><a class="btn primary" href="https://github.com/donaldsteele/overhear/releases/latest">Download 0.1.0</a><a class="btn secondary" href="https://github.com/donaldsteele/overhear">View on GitHub</a></div>
+<ul class="badges" aria-label="At a glance"><li>Linux</li><li>amd64 and arm64</li><li>Never transmits</li><li>MIT licence</li></ul>
+<p class="hero-note">One small binary, as a line per packet, a verbose dump, JSON lines or a live screen. Version 0.1 is the first release: see <a href="#good-to-know">Good to know</a>.</p>
+</div>
+<figure class="frame"><a href="assets/screens/live.png" aria-label="Open full size: the overhear live screen"><img src="assets/screens/live.png" width="1754" height="1090" alt="The overhear live screen: a table of 31 devices sorted by name, among them a core switch, an access point, a desk phone, a TV and two printers, above a warnings pane listing a second DHCP server, an unexpected IPv6 router, an address conflict and a name-poisoning pattern" fetchpriority="high"></a></figure>
+</div>
+<div class="wrap"><div class="ruler" role="presentation"><span class="swatches" aria-hidden="true"><i></i><i></i><i></i></span></div></div>
+</div>
+
+<section id="why"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>01 / Why overhear</span></p><h2>Who is there, and what they say.</h2></div>
+<p class="prose intro">Every network chatters. Devices ask for addresses, announce their names and services, and advertise routes to anyone listening. overhear listens, and turns that chatter into a list of devices and a short list of things to worry about.</p>
+<div class="why">
+<div><h3><span style="background:var(--signal)"></span>Who is there</h3><p>Every device it hears goes into a table: its MAC and IP addresses, the names it gives itself over DHCP, mDNS, NetBIOS, LLMNR, LLDP and CDP, its vendor, and the protocols it spoke.</p></div>
+<div><h3><span style="background:var(--hot)"></span>What looks wrong</h3><p>A second DHCP server, an IPv6 router that should not be there, two devices claiming one address, and the answer-everything pattern of poisoning tools such as Responder.</p></div>
+<div><h3><span style="background:var(--amber)"></span>It never sends a packet</h3><p>No replies, no scans, no name lookups. You can leave it on a mirror port of a network you do not own and it stays silent.</p></div>
+<div><h3><span style="background:var(--ink)"></span>Hard to hurt</h3><p>Text from packets is escaped before it reaches your terminal. Privileges are dropped as soon as the capture is open, and memory is capped at a budget you can set.</p></div>
+</div>
+</div></section>
+
+<section id="tour"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>02 / Feature tour</span></p><h2>Four ways to listen.</h2></div>
+<p class="prose intro">Every sample below is real output of overhear 0.1.0, run over the generated test captures that ship with the source.</p>
+<article class="row wide"><div class="lead"><div><span class="tag">01 / default</span><h3>One line per packet</h3></div><div><p>Each line has the time, the protocol, the source and a summary. Warnings (<code>WARN</code>) and newly learned baselines (<code>NOTE</code>) get lines of their own, right after the packet that caused them.</p><p>Here a second DHCP server answers a client, a server on VLAN 100 is learned separately, and a damaged offer is still decoded as far as it goes.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="Line output of overhear -r dhcp.pcap"><code><!-- sample:line --><span class="p">$ </span>overhear -r dhcp.pcap
+2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 "host-a"
+2026-11-21 13:02:11.250 DHCP  192.168.1.1        OFFER 192.168.1.50 to 02:00:5e:10:00:39
+2026-11-21 13:02:11.250 NOTE  expected DHCP server 192.168.1.1 (learned)
+2026-11-21 13:02:11.500 DHCP  192.168.1.254      OFFER 192.168.1.51 to 02:00:5e:10:00:39
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+2026-11-21 13:02:11.750 DHCP  02:00:5e:10:00:39  REQUEST 192.168.1.50 by 02:00:5e:10:00:39 "host-a"
+2026-11-21 13:02:12.000 DHCP  192.168.1.1        ACK 192.168.1.50 to 02:00:5e:10:00:39
+2026-11-21 13:02:12.250 DHCP  192.168.1.1        NAK to 02:00:5e:10:00:39
+2026-11-21 13:02:12.500 DHCP  10.9.9.1           [100] OFFER 10.9.9.50 to 02:00:5e:10:00:3a
+2026-11-21 13:02:12.500 NOTE  [100] expected DHCP server 10.9.9.9 (learned)
+2026-11-21 13:02:12.750 DHCP  192.168.1.1        OFFER 192.168.1.52 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.000 DHCP  192.168.1.1        OFFER 192.168.1.53 to 02:00:5e:10:00:39 [malformed: dhcp truncated]
+2026-11-21 13:02:13.250 DHCP  192.168.1.1        ACK 192.168.1.54 to 02:00:5e:10:00:39
+2026-11-21 13:02:13.500 DHCP  192.168.1.1        ACK 192.168.1.55 to 02:00:5e:10:00:39
+overhear: 11 packets, 0 dropped by the kernel, 0 dropped by overhear, 4 devices<!-- /sample:line --></code></pre></article>
+<article class="row"><div><span class="tag">02 / -v</span><h3>Every field</h3><p>A block per packet: one line per layer and, for protocols with options or TLVs, one line each.</p><p>Here two filter words pick out a switch's LLDP announcement and a Cisco CDP one: names, ports, capabilities, management addresses, software and native VLAN.</p></div>
+<pre class="term" role="region" tabindex="0" aria-label="Verbose output of an LLDP and a CDP packet"><code><!-- sample:verbose --><span class="p">$ </span>overhear -v -r lldp_cdp.pcap \
+  ether src 02:00:5e:10:00:60 or ether src 02:00:5e:10:00:63
+2026-11-21 13:02:11.000  122 bytes
+  ETH   02:00:5e:10:00:60 → 01:80:c2:00:00:0e  type 0x88cc
+  LLDP  chassis 02:00:5e:10:00:60 subtype 4
+        port Gi1/0/24 subtype 5
+        ttl 120
+        port-descr uplink to distribution
+        sysname core-sw1
+        sysdescr Acme Switch OS 4.2
+        capabilities bridge router enabled bridge router
+        mgmt 192.168.1.2 subtype 1
+        port-vlan 10
+
+2026-11-21 13:02:11.750  184 bytes
+  ETH   02:00:5e:10:00:63 → 01:00:0c:cc:cc:cc  snap oui 00000c pid 0x2000
+  CDP   version 2 ttl 180
+        device-id dist-sw2.example.net
+        addresses 192.168.1.3
+        port-id GigabitEthernet1/0/1
+        capabilities 0x00000028 switch igmp
+        software Cisco IOS Software, Version 15.2(7)E
+        platform cisco WS-C2960X-48TS-L
+        vtp-domain corp
+        native-vlan 10
+        duplex full
+
+overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!-- /sample:verbose --></code></pre></article>
+<article class="row flip"><div><span class="tag">03 / -j</span><h3>JSON lines</h3><p>One object per line, each starting with <code>"schema":1</code> and a <code>type</code>: packet, warning, baseline or status. Here the first line of a capture, pretty-printed by <code>jq</code>.</p><p>Text that is not valid UTF-8 goes into a <code>_hex</code> field instead, so nothing from the wire can break the JSON.</p></div>
+<pre class="term" role="region" tabindex="0" aria-label="One JSON packet object"><code><!-- sample:json --><span class="p">$ </span>overhear -j -r arp.pcap | head -n 1 | jq .
+{
+  "schema": 1,
+  "type": "packet",
+  "ts": 1795266131.000000,
+  "time": "2026-11-21T13:02:11.000+00:00",
+  "len": 60,
+  "src": {
+    "mac": "02:00:5e:10:00:01"
+  },
+  "dst": {
+    "mac": "ff:ff:ff:ff:ff:ff"
+  },
+  "proto": "arp",
+  "arp": {
+    "op": 1,
+    "kind": "request",
+    "sender_mac": "02:00:5e:10:00:01",
+    "sender_ip": "192.168.1.20",
+    "target_mac": "00:00:00:00:00:00",
+    "target_ip": "192.168.1.1"
+  }
+}<!-- /sample:json --></code></pre></article>
+<article class="row wide" id="live"><div class="lead"><div><span class="tag">04 / -t</span><h3>The live screen</h3></div><div><p>A table of devices with their addresses, names, vendor and the protocols heard, and a pane of warnings below: high in red, low in yellow.</p><p><kbd>q</kbd> quits, <kbd>Enter</kbd> opens a device with everything known about it, <kbd>s</kbd> changes the sort, <kbd>/</kbd> filters, <kbd>w</kbd> moves to the warnings and <kbd>p</kbd> pauses the table.</p></div></div>
+<figure class="screen-fig"><pre class="term screen" role="region" tabindex="0" aria-label="The live screen, 100 columns by 26 rows"><code><!-- sample:tui --><span class="rv"> overhear  lan.pcap   31 devices   7 warnings   root 8000.00:11:22:33:44:01   13:02:43              </span>
+<span class="b">MAC               IP              NAME             VENDOR     HEARD</span>
+<span class="rv">02:00:5e:10:00:61                 ap-lobby         (random)   LLDP                                  </span>
+02:00:5e:10:00:60                 core-sw1         (random)   LLDP
+02:00:5e:10:00:62                 desk-phone-17    (random)   LLDP
+02:00:5e:10:00:63                 dist-sw2.exampl… (random)   CDP
+02:00:5e:10:00:65                 evil\x1b[2Jsw    (random)   LLDP
+02:00:5e:10:00:39 192.168.1.50    host-a           (random)   DHCP
+02:00:5e:10:00:21 192.168.1.33    Living-Room-TV   (random)   mDNS
+02:00:5e:10:00:30 192.168.1.48    printer          (random)   mDNS
+02:00:5e:10:00:31 192.168.1.49    printer          (random)   mDNS
+02:00:5e:10:00:66                 printer          (random)   LLMNR
+02:00:5e:10:00:50 192.168.1.80    WORKSTATION1     (random)   NBNS STP
+02:00:5e:10:00:01 fe80::1                          (random)   DHCP ND
+02:00:5e:10:00:02 fe80::2                          (random)   ND
+02:00:5e:10:00:03 fe80::3                          (random)   ND
+02:00:5e:10:00:04 2001:db8:1::50                   (random)   ND
+ warnings ──────────────────────────────────────────────────────────────────────────────────────────
+<span class="lo">13:02:42  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago</span>
+<span class="lo">13:02:13  name FILESERVER&lt;20&gt; answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40</span>
+<span class="lo">13:02:12  name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30</span>
+<span class="hi">13:02:12  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route</span>
+<span class="hi">13:02:11  02:00:5e:10:00:66 answers LLMNR queries for many names (wpad, fileserver, printer): the pa</span>
+<span class="lo">13:02:11  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers</span>
+<span class="hi">13:02:11  second DHCP server 192.168.1.254 (expected 192.168.1.1)</span>
+ q quit  ↑↓ select  enter details  s sort: name  / filter  w warnings  p pause<!-- /sample:tui --></code></pre>
+<figcaption>Drawn by overhear's own screen code over six of the test captures, read together in time order and sorted by name. The test captures use locally administered MAC addresses, so the vendor column says (random). The name on the fifth row arrived with a terminal escape sequence in it, and is shown escaped.</figcaption></figure></article>
+</div></section>
+
+<section id="decodes"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>03 / What it decodes</span></p><h2>Ten protocols, spoken out loud.</h2></div>
+<p class="prose intro">By default overhear asks the kernel for just what it can decode: broadcast and multicast frames, ARP, the DHCP, NetBIOS, SSDP, mDNS and LLMNR ports, and IPv6 neighbour discovery.</p>
+<div class="protos">
+<div><h3>ARP</h3><p>Who has which IPv4 address: requests, replies, probes and announcements.</p></div>
+<div><h3>DHCP</h3><p>Clients and the host names they send, and every server that offers, acknowledges or refuses an address, with each option decoded.</p></div>
+<div><h3>IPv6 neighbour discovery</h3><p>Routers with their prefixes, DNS servers and routes; neighbour advertisements and duplicate address checks.</p></div>
+<div><h3>mDNS</h3><p>The names, addresses and services devices advertise: printers, TVs, phones, AirPlay and Cast targets.</p></div>
+<div><h3>LLMNR</h3><p>Windows name queries, and who answers them.</p></div>
+<div><h3>NetBIOS name service</h3><p>Workstation and workgroup names as they register, and who answers queries for them.</p></div>
+<div><h3>SSDP</h3><p>UPnP devices announcing themselves and answering searches, with their device type and description URL.</p></div>
+<div><h3>LLDP</h3><p>Switch, access point and phone names, ports, capabilities, management addresses and VLANs.</p></div>
+<div><h3>CDP</h3><p>Cisco device names, ports, platform, software version, VTP domain and native VLAN.</p></div>
+<div><h3>STP, RSTP and MSTP</h3><p>The root bridge, each bridge's id and path cost, and topology changes.</p></div>
+</div>
+<p class="prose after">Frames may carry any number of 802.1Q or QinQ VLAN tags, and each VLAN is learned on its own. Anything else that gets through the filter is shown in brief: UDP ports, the ICMPv6 type, LLC or the ethertype. A damaged packet is decoded as far as it goes, with a note saying where it broke.</p>
+</div></section>
+
+<section id="warnings"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>04 / Warnings</span></p><h2>Four warnings worth reading.</h2></div>
+<p class="prose intro">overhear learns what is normal on each VLAN and warns when something differs. <strong>High</strong> means very likely a problem; <strong>low</strong> means odd and worth a look. A warning is shown the first time it happens; repeats are counted and summarised at most once a minute.</p>
+<div class="rules">
+<div><h3><code>second-dhcp-server</code></h3><p class="sev"><span class="high">high</span></p><p>A DHCP offer, ACK or NAK from a server other than the expected one. The first server a VLAN hears is learned, unless you pinned one.</p></div>
+<div><h3><code>unexpected-router</code></h3><p class="sev"><span class="high">high</span> <span class="low">low</span></p><p>An IPv6 router advertising a default route that is not the expected router (high), or a router with no default route that hands out DNS servers or a global prefix (low).</p></div>
+<div><h3><code>address-conflict</code></h3><p class="sev"><span class="low">low</span> <span class="high">high</span></p><p>An IPv4 or IPv6 address claimed by a different MAC than before, seen in ARP or neighbour advertisements. High when the address belongs to an expected DHCP server, its gateway or an expected router.</p></div>
+<div><h3><code>suspicious-name-answers</code></h3><p class="sev"><span class="low">low</span> <span class="high">high</span></p><p>One name answered differently by two devices within five minutes (low), or one device answering LLMNR or NetBIOS queries for three different names (high): the pattern of poisoning tools such as Responder.</p></div>
+</div>
+<p class="prose after">Two more keep the picture honest: <code>capture-drops</code> says at once when frames were dropped, so a quiet screen is not mistaken for a quiet network, and <code>memory-eviction</code> says when the memory budget forced old devices out, as a flood of fake MAC addresses would.</p>
+<pre class="term" role="region" tabindex="0" aria-label="Warning lines from five test captures"><code><!-- sample:warnings --><span class="p">$ </span>for f in dhcp nd arp llmnr_nbns mdns; do overhear -r $f.pcap; done 2&gt;/dev/null | grep WARN
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+2026-11-21 13:02:11.750 WARN  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
+2026-11-21 13:02:12.000 WARN  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
+2026-11-21 13:02:42.750 WARN  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago
+2026-11-21 13:03:12.250 WARN  192.168.1.50 now claimed by 02:00:5e:10:00:0b, was 02:00:5e:10:00:0a 1m ago
+2026-11-21 13:02:11.750 WARN  02:00:5e:10:00:66 answers LLMNR queries for many names (wpad, fileserver, printer): the pattern of poisoning tools such as Responder
+2026-11-21 13:02:13.000 WARN  name FILESERVER&lt;20&gt; answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40
+2026-11-21 13:02:12.000 WARN  name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30<!-- /sample:warnings --></code></pre>
+<div class="row wide pins">
+<div class="lead"><div><h3>Pin what you expect</h3></div><div><p>The first DHCP server and IPv6 router each VLAN hears are trusted and announced with a <code>NOTE</code> line. To avoid trusting whoever speaks first, name them with <code>--dhcp-server IP[@VLAN]</code> and <code>--router MAC|IPV6[@VLAN]</code>, as often as you need.</p><p>A pin without <code>@VLAN</code> applies to every VLAN; QinQ is written outer first, as <code>@200.100</code>. A VLAN covered by a pin learns nothing by itself, so pinning 192.168.1.1 for every VLAN also flags the server on VLAN 100, until that one is pinned for VLAN 100 too.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="Pinning expected DHCP servers"><code><!-- sample:pins --><span class="p">$ </span>overhear -r dhcp.pcap --dhcp-server 192.168.1.1 2&gt;/dev/null | grep WARN
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+2026-11-21 13:02:12.500 WARN  [100] second DHCP server 10.9.9.9 (expected 192.168.1.1)
+<span class="p">$ </span>overhear -r dhcp.pcap --dhcp-server 192.168.1.1 --dhcp-server 10.9.9.9@100 2&gt;/dev/null | grep WARN
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)<!-- /sample:pins --></code></pre>
+</div>
+</div></section>
+
+<section id="usage"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>05 / Usage</span></p><h2>One binary, a handful of flags.</h2></div>
+<div class="power">
+<div>
+<p>Point it at an interface, or at a recording made with tcpdump or Wireshark. Reading a file needs no privileges at all.</p>
+<p>Extra words at the end are a capture filter in <a href="https://www.tcpdump.org/manpages/pcap-filter.7.html">pcap-filter</a> syntax, joined to the built-in filter with <em>and</em>: they can only narrow what is shown. Write addresses and ports as numbers, because names in a filter are looked up by libpcap.</p>
+<p>Every option, rule and JSON field is in <a href="manual.html">the manual</a>, also installed as <code>man overhear</code>.</p>
+</div>
+<pre class="term" role="region" tabindex="0" aria-label="Common command lines"><code><span class="c"># one line per packet (as root, it then runs as nobody)</span>
+<span class="p">$ </span>sudo overhear -i eth0
+
+<span class="c"># read a recording, or a live pipe from tcpdump</span>
+<span class="p">$ </span>overhear -r capture.pcap
+<span class="p">$ </span>tcpdump -i eth0 -w - -s 0 | overhear -r -
+
+<span class="c"># only what concerns one host</span>
+<span class="p">$ </span>overhear -i eth0 host 192.168.1.20
+
+<span class="c"># JSON lines, warnings only</span>
+<span class="p">$ </span>overhear -j -i eth0 | jq -c 'select(.type == "warning")'
+
+<span class="c"># the live screen</span>
+<span class="p">$ </span>overhear -t -i eth0
+
+<span class="c"># the interfaces you can capture from</span>
+<span class="p">$ </span>overhear -D</code></pre>
+</div>
+
+<h3 class="sub">The flags</h3>
+<table class="flags">
+<thead><tr><th scope="col">Flag</th><th scope="col">What it does</th></tr></thead>
+<tbody>
+<tr><td><code>-i IFACE</code></td><td>Capture from this interface. Without <code>-i</code> or <code>-r</code>, the system's default capture device.</td></tr>
+<tr><td><code>-r FILE</code></td><td>Read a pcap or pcapng file instead; <code>-r -</code> reads standard input. Times then include the date.</td></tr>
+<tr><td><code>-t</code></td><td>The live screen.</td></tr>
+<tr><td><code>-v</code></td><td>Every decoded field, a block per packet.</td></tr>
+<tr><td><code>-j</code></td><td>One JSON object per line. <code>-j</code>, <code>-t</code> and <code>-v</code> cannot be combined.</td></tr>
+<tr><td><code>-H</code></td><td>Add a hex dump of each frame, or a <code>frame_hex</code> member in JSON.</td></tr>
+<tr><td><code>-p</code></td><td>Do not put the interface in promiscuous mode.</td></tr>
+<tr><td><code>-Z USER</code></td><td>When started as root, the user to switch to once the capture is open (default <code>nobody</code>).</td></tr>
+<tr><td><code>--dhcp-server</code> <code>IP[@VLAN]</code></td><td>A DHCP server you expect. Repeat it for a failover pair or one server per VLAN.</td></tr>
+<tr><td><code>--router</code> <code>MAC|IPV6[@VLAN]</code></td><td>An IPv6 router you expect, by MAC or link-local address. Repeatable.</td></tr>
+<tr><td><code>--max-memory</code> <code>SIZE</code></td><td>The budget for what overhear remembers, with a <code>K</code>, <code>M</code> or <code>G</code> suffix. Default <code>64M</code>, at least <code>4M</code>.</td></tr>
+<tr><td><code>-D</code></td><td>List the interfaces you can capture from, and exit.</td></tr>
+<tr><td><code>FILTER&hellip;</code></td><td>Capture filter words, joined to the built-in filter with <em>and</em>.</td></tr>
+<tr><td><code>-h</code>, <code>-V</code></td><td>Help and version.</td></tr>
+</tbody>
+</table>
+
+<div class="row wide json">
+<div class="lead"><div><h3>JSON for your scripts</h3></div><div><p>Every line of <code>-j</code> output is one JSON object with <code>"schema":1</code> and a <code>type</code>. A complete run ends with a <code>status</code> line marked <code>"final":true</code>; if it is missing, the run stopped early.</p><p>The three one-liners here run on the DHCP test capture: everything but the packets, the rogue server and its MAC, and devices per vendor prefix. The first three bytes of a MAC (the OUI) name its maker; the test captures use locally administered addresses, so they share one prefix.</p></div></div>
+<pre class="term" role="region" tabindex="0" aria-label="jq one-liners on overhear JSON"><code><!-- sample:jq --><span class="p">$ </span>overhear -j -r dhcp.pcap | jq -c 'select(.type != "packet")'
+{"schema":1,"type":"baseline","ts":1795266131.250000,"time":"2026-11-21T13:02:11.250+00:00","segment":"untagged","what":"dhcp-server","ip":"192.168.1.1"}
+{"schema":1,"type":"warning","ts":1795266131.500000,"time":"2026-11-21T13:02:11.500+00:00","rule":"second-dhcp-server","severity":"high","segment":"untagged","subject":"192.168.1.254","message":"second DHCP server 192.168.1.254 (expected 192.168.1.1)","macs":["02:00:5e:10:00:fe","02:00:5e:10:00:39"],"addrs":["192.168.1.254"],"count":1}
+{"schema":1,"type":"baseline","ts":1795266132.500000,"time":"2026-11-21T13:02:12.500+00:00","segment":"100","what":"dhcp-server","ip":"10.9.9.9"}
+{"schema":1,"type":"status","final":true,"packets":11,"kernel_drops":0,"channel_drops":0,"devices":4,"evictions":0}
+<span class="p">$ </span>overhear -j -r dhcp.pcap | jq -r 'select(.rule == "second-dhcp-server") | "\(.subject) \(.macs[0])"'
+192.168.1.254 02:00:5e:10:00:fe
+<span class="p">$ </span>overhear -j -r dhcp.pcap | jq -rs 'map(select(.type == "packet") | .src.mac // empty) | unique | group_by(.[:8])[] | "\(length) \(.[0][:8])"'
+4 02:00:5e<!-- /sample:jq --></code></pre>
+</div>
+</div></section>
+
+<section id="pi"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>06 / Raspberry Pi</span></p><h2>A Pi on a mirror port.</h2></div>
+<div class="power">
+<div>
+<p>Mirror (SPAN) the switch ports you care about to one port, and plug a Raspberry Pi 4 running Raspberry Pi OS 64-bit into it.</p>
+<ol class="steps">
+<li><span>Install the arm64 package.</span></li>
+<li><span>Give overhear capture rights with <code>setcap</code>.</span></li>
+<li><span>Leave the mirror port without an IP address, so the Pi sends nothing there.</span></li>
+<li><span>Run the live screen, or keep a record as JSON lines.</span></li>
+<li><span>If a <code>capture-drops</code> warning appears, the mirror carries more than the Pi can read: narrow the mirror, or add filter words.</span></li>
+</ol>
+<p>On a mirror port you also see the unicast replies, so the table fills in more. The default memory budget is 64M; on a small board, turn it down.</p>
+</div>
+<pre class="term" role="region" tabindex="0" aria-label="Commands for a Raspberry Pi"><code><span class="c"># on the Pi</span>
+<span class="p">$ </span>sudo apt install ./overhear_0.1.0-1_arm64.deb
+<span class="p">$ </span>sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/overhear
+
+<span class="c"># watch the mirror port</span>
+<span class="p">$ </span>overhear -t -i eth0
+
+<span class="c"># or keep a record</span>
+<span class="p">$ </span>overhear -j -i eth0 &gt; lan.jsonl
+
+<span class="c"># on a small board</span>
+<span class="p">$ </span>overhear -t -i eth0 --max-memory 16M</code></pre>
+</div>
+<div class="warn">
+<p><strong>Where the Pi stands.</strong> The arm64 package is built in a Debian 12 container, and the whole test suite runs for arm64 under emulation. The checks on Raspberry Pi hardware (speed, the live screen under load, ten minutes on a real LAN) have not been run yet.</p>
+<p>On x86-64, overhear kept up with 100,000 frames a second for five minutes, in line and JSON mode, without dropping a frame.</p>
+</div>
+</div></section>
+
+<section id="download"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>07 / Download</span></p><h2>Version 0.1.0.</h2></div>
+<div class="dl">
+<div class="card"><h3>amd64</h3><p class="req">Debian 12 or later</p><ul><li>.deb for 64-bit PCs and servers</li><li>Needs libpcap 1.10 or later</li></ul><a class="btn" href="https://github.com/donaldsteele/overhear/releases/latest">Get the amd64 .deb</a></div>
+<div class="card"><h3>arm64</h3><p class="req">Raspberry Pi OS 64-bit, Debian 12 or later</p><ul><li>.deb for 64-bit Arm boards</li><li>Tested under arm64 emulation</li></ul><a class="btn" href="https://github.com/donaldsteele/overhear/releases/latest">Get the arm64 .deb</a></div>
+<div class="card"><h3>From source</h3><p class="req">Rust 1.85 or later</p><ul><li>Needs the libpcap development files</li><li>One <code>cargo build</code></li></ul><a class="btn" href="https://github.com/donaldsteele/overhear">Get the source</a></div>
+</div>
+<div class="power install">
+<div>
+<p>The packages install <code>/usr/bin/overhear</code>, the manual page and the README, and depend on <code>libpcap0.8</code>. They need no newer glibc than 2.36.</p>
+<p>To build it yourself you need Rust and the libpcap headers. The result is <code>target/release/overhear</code>.</p>
+</div>
+<pre class="term" role="region" tabindex="0" aria-label="Install and build commands"><code><span class="c"># install a package</span>
+<span class="p">$ </span>sudo apt install ./overhear_0.1.0-1_amd64.deb
+
+<span class="c"># or build from source</span>
+<span class="p">$ </span>sudo apt install build-essential pkg-config libpcap-dev
+<span class="p">$ </span>git clone https://github.com/donaldsteele/overhear
+<span class="p">$ </span>cd overhear &amp;&amp; cargo build --release</code></pre>
+</div>
+<div class="warn">
+<p><strong>Capturing needs privileges.</strong> Run overhear as root and it switches to <code>nobody</code> as soon as the capture is open. Or give the binary capture rights once and run it as yourself:</p>
+<p><code>sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/overhear</code></p>
+<p>Either way, once the capture is open overhear clears every capability and sets <code>no_new_privs</code>, before it decodes a single packet.</p>
+</div>
+</div></section>
+
+<section id="good-to-know"><div class="wrap">
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>08 / Good to know</span></p><h2>The honest list.</h2></div>
+<ol class="good">
+<li><span>On a switch, a passive listener hears broadcasts and multicasts, not unicast traffic between other devices. DHCP ACKs to a client elsewhere and ARP replies go unseen, and a device that never broadcasts is not seen at all. Listen on a mirror port, a tap or a hub to see more.</span></li>
+<li><span>With filter words, tagged frames are matched through a single VLAN tag, so unicast frames with two or more tags (QinQ) are missed. QinQ broadcasts and multicasts still match, and without filter words nothing is missed.</span></li>
+<li><span>Linux only for now, on amd64 and arm64. Windows is planned.</span></li>
+<li><span>Reading a quiet pipe with <code>-r -</code>, the first Ctrl-C waits for more data or the end of the input. Press Ctrl-C again to stop at once.</span></li>
+<li><span>The memory cap is approximate. It covers the devices and warning state, not packet buffers or the program itself: with the default 64M, a flood of a million MAC addresses stays under 112 MiB resident.</span></li>
+<li><span>Host and port names in filter words are looked up by libpcap through the system resolver, which can send DNS queries. overhear itself never does; write numbers for strict silence.</span></li>
+<li><span>This is version 0.1, and the Raspberry Pi hardware checks are still to come. Tell us what you find on GitHub.</span></li>
+</ol>
+</div></section>
+</main>
+
+<footer>
+<div class="wrap">
+<div>
+<p>overhear is released under the <a href="https://github.com/donaldsteele/overhear/blob/main/LICENSE">MIT licence</a>.</p>
+<p>Every sample on this page is real output of overhear 0.1.0 over the generated test captures in the repository. No capture of a real network is used.</p>
+</div>
+<ul aria-label="Documentation">
+<li><a href="manual.html">Manual</a></li>
+<li><a href="https://github.com/donaldsteele/overhear">GitHub</a></li>
+<li><a href="https://github.com/donaldsteele/overhear/releases/latest">Releases</a></li>
+<li><a href="https://github.com/donaldsteele/overhear/blob/main/LICENSE">MIT licence</a></li>
+</ul>
+</div>
+</footer>
+</body>
+</html>
