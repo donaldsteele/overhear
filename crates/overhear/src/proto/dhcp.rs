@@ -519,6 +519,15 @@ fn nonempty(b: Cow<'_, [u8]>) -> Option<Cow<'_, [u8]>> {
     (!b.is_empty()).then_some(b)
 }
 
+/// The client a reply names when it is not an Ethernet one: the first six
+/// bytes of chaddr, or all zero when there are fewer.
+fn reply_client(d: &Dhcp<'_>) -> Mac {
+    d.chaddr
+        .get(..6)
+        .and_then(Mac::from_slice)
+        .unwrap_or(Mac([0; 6]))
+}
+
 /// The sender was heard. Client messages name and describe the client; ACKs
 /// record the leased address; server replies are reported for the DHCP checks.
 pub fn observe<'a>(p: &Packet<'a>, d: &Dhcp<'a>, out: &mut Vec<Observation<'a>>) {
@@ -551,14 +560,18 @@ pub fn observe<'a>(p: &Packet<'a>, d: &Dhcp<'a>, out: &mut Vec<Observation<'a>>)
         }
     }
     let Some(msg_type) = d.msg_type() else { return };
-    let Some(client) = client else { return };
     if msg_type == ACK && !d.yiaddr.is_unspecified() {
-        out.push(Observation::Address {
-            mac: client,
-            ip: IpAddr::V4(d.yiaddr),
-        });
+        if let Some(mac) = client {
+            out.push(Observation::Address {
+                mac,
+                ip: IpAddr::V4(d.yiaddr),
+            });
+        }
     }
     if matches!(msg_type, OFFER | ACK | NAK) {
+        // Every reply goes to the server checks, whatever its hardware type,
+        // so that a rogue server cannot slip past them with an odd htype.
+        let client = client.unwrap_or_else(|| reply_client(d));
         let server_id = d.server_id().or_else(|| match p.ip.map(|ip| ip.src()) {
             Some(IpAddr::V4(a)) => Some(a),
             _ => None,
@@ -829,6 +842,53 @@ mod tests {
         assert_eq!(o.len(), 2);
         assert!(matches!(o[1], Observation::DhcpReply { .. }));
         assert!(!o.iter().any(|o| matches!(o, Observation::Role { .. })));
+    }
+
+    #[test]
+    fn replies_with_other_hardware_types_are_still_reported() {
+        // A rogue server must not escape the server checks with an unusual
+        // htype: the client is the first six chaddr bytes.
+        let mut m = reply(2);
+        m.htype = 6;
+        let o = obs(&m, 0xfd, a(253));
+        assert_eq!(
+            o,
+            vec![
+                Observation::Heard {
+                    mac: Mac(mac(0xfd)),
+                    proto: ProtoTag::Dhcp
+                },
+                Observation::DhcpReply {
+                    client: Mac(mac(0x39)),
+                    server_mac: Mac(mac(0xfd)),
+                    server_id: a(1),
+                    msg_type: 2,
+                    router: Some(a(1)),
+                },
+                Observation::Role {
+                    mac: Mac(mac(0xfd)),
+                    role: Role::DhcpServer
+                },
+            ]
+        );
+        // Fewer than six address bytes: an all-zero client.
+        let mut m = reply(5);
+        m.hlen = 4;
+        let o = obs(&m, 0xfd, a(253));
+        assert!(o.contains(&Observation::DhcpReply {
+            client: Mac([0; 6]),
+            server_mac: Mac(mac(0xfd)),
+            server_id: a(1),
+            msg_type: 5,
+            router: Some(a(1)),
+        }));
+        // The client-keyed facts still need an Ethernet address.
+        assert!(!o.iter().any(|o| matches!(o, Observation::Address { .. })));
+        let mut m = reply(5);
+        m.htype = 6;
+        let o = obs(&m, 0xfd, a(253));
+        assert!(!o.iter().any(|o| matches!(o, Observation::Address { .. })));
+        assert!(o.iter().any(|o| matches!(o, Observation::DhcpReply { .. })));
     }
 
     #[test]

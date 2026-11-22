@@ -242,6 +242,11 @@ fn dhcp_scenario() -> Vec<TFrame> {
         .push((121, vec![24, 10, 0, 1, 192, 168, 1, 1]));
     routes.options.push((121, vec![0, 192, 168, 1, 1]));
     f.push(from(server, ip(1), &routes));
+
+    // A rogue server whose offer claims hardware type 6 (IEEE 802).
+    let mut ieee802 = DhcpMsg::reply(2, ip(253), ip(56), client);
+    ieee802.htype = 6;
+    f.push(from(mac(0xfd), ip(253), &ieee802));
     stamp(f)
 }
 

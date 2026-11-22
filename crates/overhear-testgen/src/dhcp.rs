@@ -6,6 +6,9 @@ use std::net::Ipv4Addr;
 #[derive(Debug, Clone)]
 pub struct DhcpMsg {
     pub op: u8,
+    /// Hardware type and address length (1 and 6, Ethernet, unless changed).
+    pub htype: u8,
+    pub hlen: u8,
     pub xid: u32,
     pub flags: u16,
     pub ciaddr: Ipv4Addr,
@@ -31,7 +34,7 @@ fn fixed(field: &[u8], n: usize) -> Vec<u8> {
 impl DhcpMsg {
     pub fn bytes(&self) -> Vec<u8> {
         let mut b = Vec::with_capacity(300);
-        b.extend_from_slice(&[self.op, 1, 6, 0]);
+        b.extend_from_slice(&[self.op, self.htype, self.hlen, 0]);
         b.extend_from_slice(&self.xid.to_be_bytes());
         b.extend_from_slice(&[0, 0]);
         b.extend_from_slice(&self.flags.to_be_bytes());
@@ -58,6 +61,8 @@ impl DhcpMsg {
         id.extend_from_slice(&mac);
         DhcpMsg {
             op: 1,
+            htype: 1,
+            hlen: 6,
             xid: 0x3903_f326,
             flags: 0x8000,
             ciaddr: Ipv4Addr::UNSPECIFIED,
@@ -80,6 +85,8 @@ impl DhcpMsg {
     pub fn reply(msg_type: u8, server: Ipv4Addr, yiaddr: Ipv4Addr, mac: [u8; 6]) -> Self {
         DhcpMsg {
             op: 2,
+            htype: 1,
+            hlen: 6,
             xid: 0x3903_f326,
             flags: 0,
             ciaddr: Ipv4Addr::UNSPECIFIED,
