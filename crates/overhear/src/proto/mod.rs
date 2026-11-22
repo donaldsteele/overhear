@@ -9,6 +9,7 @@ pub mod nbns;
 pub mod nd;
 pub mod other;
 pub mod ssdp;
+pub mod stp;
 
 use overhear_decode::{Packet, Proto};
 
@@ -30,6 +31,7 @@ pub fn tag(p: &Packet<'_>) -> &'static str {
         Proto::Ssdp(_) => ssdp::tag(),
         Proto::Lldp(_) => lldp::tag(),
         Proto::Cdp(_) => cdp::tag(),
+        Proto::Stp(_) => stp::tag(),
     }
 }
 
@@ -46,6 +48,7 @@ pub fn summary(p: &Packet<'_>, out: &mut String) {
         Proto::Ssdp(m) => ssdp::summary(m, out),
         Proto::Lldp(m) => lldp::summary(m, out),
         Proto::Cdp(m) => cdp::summary(m, out),
+        Proto::Stp(s) => stp::summary(s, out),
     }
 }
 
@@ -62,6 +65,7 @@ pub fn verbose(p: &Packet<'_>, frame: &[u8], out: &mut String) {
         Proto::Ssdp(m) => ssdp::verbose(m, out),
         Proto::Lldp(m) => lldp::verbose(m, out),
         Proto::Cdp(m) => cdp::verbose(m, out),
+        Proto::Stp(s) => stp::verbose(s, out),
     }
 }
 
@@ -78,6 +82,7 @@ pub fn json_name(p: &Packet<'_>) -> &'static str {
         Proto::Ssdp(_) => "ssdp",
         Proto::Lldp(_) => "lldp",
         Proto::Cdp(_) => "cdp",
+        Proto::Stp(_) => "stp",
     }
 }
 
@@ -94,6 +99,7 @@ pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
         Proto::Ssdp(m) => ssdp::json(m, w),
         Proto::Lldp(m) => lldp::json(m, w),
         Proto::Cdp(m) => cdp::json(m, w),
+        Proto::Stp(s) => stp::json(s, w),
     }
 }
 
@@ -110,5 +116,6 @@ pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
         Proto::Ssdp(m) => ssdp::observe(p, m, out),
         Proto::Lldp(m) => lldp::observe(p, m, out),
         Proto::Cdp(m) => cdp::observe(p, m, out),
+        Proto::Stp(s) => stp::observe(p, s, out),
     }
 }

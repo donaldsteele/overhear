@@ -74,4 +74,11 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "stp"
+path = "fuzz_targets/stp.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]

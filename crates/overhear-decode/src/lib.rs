@@ -26,6 +26,7 @@ mod nd;
 mod packet;
 mod problem;
 mod ssdp;
+mod stp;
 
 pub use arp::{Arp, ArpKind, parse as parse_arp};
 pub use cdp::{Cdp, CdpTlv, parse as parse_cdp};
@@ -43,3 +44,4 @@ pub use nd::{Nd, NdOpt, parse as parse_nd};
 pub use packet::{Decoded, L4, Packet, Proto, UdpHeader, decode};
 pub use problem::{Layer, Problem};
 pub use ssdp::{MAX_HEADERS, MAX_LINE, Ssdp, StartLine, parse as parse_ssdp};
+pub use stp::{BridgeId, MAX_MSTIS, Stp, StpConfig, parse as parse_stp};

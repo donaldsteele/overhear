@@ -144,3 +144,8 @@ fn ssdp() {
 fn lldp_cdp() {
     golden("lldp_cdp");
 }
+
+#[test]
+fn stp() {
+    golden("stp");
+}

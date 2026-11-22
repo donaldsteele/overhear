@@ -1,0 +1,21 @@
+2026-11-21 13:02:11.000  60 bytes
+  ETH   02:00:5e:10:00:50 → 01:80:c2:00:00:00  llc dsap 0x42 ssap 0x42 ctrl 0x03
+  STP   STP root 8000.00:11:22:33:44:01 cost 4 bridge 8000.02:00:5e:10:00:50 port 0x8001 flags 0x00 age 0s max-age 20s hello 2s forward-delay 15s
+
+2026-11-21 13:02:11.250  60 bytes
+  ETH   02:00:5e:10:00:51 → 01:80:c2:00:00:00  llc dsap 0x42 ssap 0x42 ctrl 0x03
+  STP   RSTP root 8000.00:11:22:33:44:01 cost 20000 bridge 9001.02:00:5e:10:00:51 port 0x8002 flags 0x01 age 0s max-age 20s hello 2s forward-delay 15s
+
+2026-11-21 13:02:11.500  60 bytes
+  ETH   02:00:5e:10:00:51 → 01:80:c2:00:00:00  llc dsap 0x42 ssap 0x42 ctrl 0x03
+  STP   STP topology change notification
+
+2026-11-21 13:02:11.750  151 bytes
+  ETH   02:00:5e:10:00:52 → 01:80:c2:00:00:00  llc dsap 0x42 ssap 0x42 ctrl 0x03
+  STP   MSTP root 8000.00:11:22:33:44:01 cost 20000 bridge a001.02:00:5e:10:00:52 port 0x8003 flags 0x00 age 0s max-age 20s hello 2s forward-delay 15s msti 2
+
+2026-11-21 13:02:12.000  60 bytes
+  ETH   02:00:5e:10:00:53 → 01:80:c2:00:00:00  llc dsap 0x42 ssap 0x42 ctrl 0x03
+  DATA  20 bytes
+  !     stp: truncated at 17: 0000000000800000112233440100000004800002
+

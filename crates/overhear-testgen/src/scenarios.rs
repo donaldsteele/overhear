@@ -671,6 +671,32 @@ fn lldp_cdp_scenario() -> Vec<TFrame> {
     stamp(f)
 }
 
+fn stp_scenario() -> Vec<TFrame> {
+    const STP_MCAST: [u8; 6] = [0x01, 0x80, 0xc2, 0, 0, 0];
+    let root = (0x8000, [0x00, 0x11, 0x22, 0x33, 0x44, 0x01]);
+    let send = |src: u8, b: &[u8]| (llc(STP_MCAST, mac(src), 0x42, 0x42, 3, b), None);
+    let mut t = bpdu(0, 0, 0, root, 4, (0x8000, mac(0x53)), 0x8001, 0);
+    t.truncate(20);
+    let f = vec![
+        send(
+            0x50,
+            &bpdu(0, 0, 0, root, 4, (0x8000, mac(0x50)), 0x8001, 0),
+        ),
+        send(
+            0x51,
+            &bpdu(2, 2, 1, root, 20000, (0x9001, mac(0x51)), 0x8002, 0),
+        ),
+        send(0x51, &bpdu(0, 0x80, 0, root, 0, (0, [0; 6]), 0, 0)),
+        send(
+            0x52,
+            &bpdu(3, 2, 0, root, 20000, (0xa001, mac(0x52)), 0x8003, 2),
+        ),
+        // A configuration BPDU cut off after 20 bytes.
+        send(0x53, &t),
+    ];
+    stamp(f)
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
     vec![
@@ -682,5 +708,6 @@ pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
         ("llmnr_nbns", nbns_scenario()),
         ("ssdp", ssdp_scenario()),
         ("lldp_cdp", lldp_cdp_scenario()),
+        ("stp", stp_scenario()),
     ]
 }

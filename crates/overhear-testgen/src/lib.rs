@@ -12,6 +12,7 @@ pub mod oui;
 mod pcap;
 pub mod scenarios;
 mod ssdp;
+mod stp;
 
 pub use arp::arp;
 pub use cdp::cdp;
@@ -23,3 +24,4 @@ pub use nbns::{nb_encode, nbns};
 pub use nd::*;
 pub use pcap::*;
 pub use ssdp::ssdp;
+pub use stp::bpdu;

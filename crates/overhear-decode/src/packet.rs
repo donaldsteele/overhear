@@ -1,7 +1,7 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
 use crate::{
     Arp, Cdp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Lldp, Nbns, Nd, Problem, Ssdp,
-    arp, cdp, dhcp, dns, ethernet, lldp, nbns, nd, ssdp,
+    Stp, arp, cdp, dhcp, dns, ethernet, lldp, nbns, nd, ssdp, stp,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +29,7 @@ pub enum Proto<'a> {
     Ssdp(Ssdp<'a>),
     Lldp(Lldp<'a>),
     Cdp(Cdp<'a>),
+    Stp(Stp),
     Other { payload: &'a [u8] },
 }
 
@@ -55,6 +56,7 @@ fn dispatch_ether<'a>(
             oui: [0x00, 0x00, 0x0c],
             pid: 0x2000,
         } => cdp::parse(c, problems).map(Proto::Cdp),
+        EthKind::Llc { dsap: 0x42, .. } => stp::parse(c, problems).map(Proto::Stp),
         _ => None,
     }
 }
