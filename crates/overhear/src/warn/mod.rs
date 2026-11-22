@@ -1166,6 +1166,35 @@ mod tests {
     }
 
     #[test]
+    fn names_match_ignoring_case_and_show_the_newest_casing() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Netbios;
+        assert_eq!(r.see(U, 0, &answer(1, k, b"FileServer<20>", &[1])), []);
+        let out = r.see(U, 1, &answer(2, k, b"FILESERVER<20>", &[2]));
+        let w = only_warning(&out);
+        assert_eq!(
+            w.message,
+            "name FILESERVER<20> answered by 02:00:5e:10:00:02 and 02:00:5e:10:00:01"
+        );
+        assert_eq!(w.subject, "FILESERVER<20>");
+    }
+
+    #[test]
+    fn poisoning_list_shows_wire_casing() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Llmnr;
+        r.see(U, 0, &answer(9, k, b"WPAD", &[1]));
+        r.see(U, 1, &answer(9, k, b"FileServer", &[1]));
+        let out = r.see(U, 2, &answer(9, k, b"printer", &[1]));
+        assert!(
+            only_warning(&out)
+                .message
+                .contains("(WPAD, FileServer, printer)"),
+            "{out:?}"
+        );
+    }
+
+    #[test]
     fn name_in_warning_is_escaped() {
         let mut r = Rig::new(Pins::default());
         let k = AnswerKind::Netbios;
@@ -1229,7 +1258,7 @@ mod tests {
                 segment: Some(U),
                 subject: "02:00:5e:10:00:07".into(),
                 message: "02:00:5e:10:00:07 answers LLMNR queries for many names \
-                          (wpad, fileserver, printer): the pattern of poisoning tools \
+                          (wpad, FileServer, printer): the pattern of poisoning tools \
                           such as Responder"
                     .into(),
                 macs: vec![mac(7)],
@@ -1258,7 +1287,7 @@ mod tests {
         assert!(
             only_warning(&out)
                 .message
-                .contains("NetBIOS queries for many names (b, c, d)")
+                .contains("NetBIOS queries for many names (B, C, D)")
         );
     }
 

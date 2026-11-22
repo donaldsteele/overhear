@@ -67,7 +67,7 @@
   NBNS  response id 8193 flags 0x8500 opcode 0 rcode 0 questions 0 records 1
         AN FILESERVER<20> NB ttl 300000 unique 192.168.1.65
 
-2026-11-21 13:02:13.000 WARN  name fileserver<20> answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40
+2026-11-21 13:02:13.000 WARN  name FILESERVER<20> answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40
 2026-11-21 13:02:13.250  92 bytes
   ETH   02:00:5e:10:00:22 → ff:ff:ff:ff:ff:ff  type 0x0800
   IPv4  192.168.1.34 → 192.168.1.255  ttl 64 proto 17

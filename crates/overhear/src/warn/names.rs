@@ -22,7 +22,7 @@ pub(super) type AnswerKey = (Segment, AnswerKind, Vec<u8>);
 type HostKey = (Segment, Mac);
 /// Who answered, a hash of what they said, and when (seconds).
 type Answer = (Mac, u64, i64);
-/// Names answered recently, oldest first.
+/// Names answered recently (as last written on the wire), oldest first.
 type NameSet = Vec<(Vec<u8>, i64)>;
 
 fn answer_cost(k: &AnswerKey, _: &Answer) -> usize {
@@ -99,6 +99,7 @@ impl Names {
             .collect();
         let hash = fnv1a(data);
         let limit = budget.limit() / super::SHARE;
+        let original: Vec<u8> = name.iter().take(MAX_STR).copied().collect();
         let key: AnswerKey = (seg, kind, lower);
 
         let two = self
@@ -107,7 +108,7 @@ impl Names {
             .copied()
             .filter(|(m, h, t)| *m != mac && *h != hash && age(ts.sec, *t) <= WINDOW)
             .map(|(old, _, _)| {
-                let shown = escaped(&key.2);
+                let shown = escaped(&original);
                 Output::Warning(Warning {
                     ts,
                     rule: Rule::SuspiciousNameAnswers,
@@ -136,7 +137,7 @@ impl Names {
             AnswerKind::Netbios => "NetBIOS",
             AnswerKind::MdnsUnique => return [two, None],
         };
-        let pattern = self.note_name(index, (seg, mac), key.2, ts, label, budget);
+        let pattern = self.note_name(index, (seg, mac), original, ts, label, budget);
         [two, pattern]
     }
 
@@ -158,7 +159,7 @@ impl Names {
             *t = (*t).min(ts.sec);
         }
         set.retain(|(_, t)| age(ts.sec, *t) <= WINDOW);
-        let known = set.iter().position(|(n, _)| *n == name);
+        let known = set.iter().position(|(n, _)| n.eq_ignore_ascii_case(&name));
         if let Some(i) = known {
             set.remove(i);
         } else if set.len() >= POISON_NAMES {
