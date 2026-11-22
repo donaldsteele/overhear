@@ -156,6 +156,7 @@ mod tests {
     use super::*;
     use crate::observe::{NameSource, ProtoTag};
     use crate::track::Tracker;
+    use crate::warn::Pins;
     use std::borrow::Cow;
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -346,7 +347,7 @@ mod tests {
     }
     #[test]
     fn eviction_respects_budget() {
-        let mut tr = Tracker::new(64 * 1024);
+        let mut tr = Tracker::new(64 * 1024, Pins::default());
         let long: Vec<u8> = vec![b'n'; 200];
         for i in 0..10_000u32 {
             let m = mac(i);
@@ -358,7 +359,7 @@ mod tests {
                     source: NameSource::Mdns,
                 },
             ];
-            tr.apply(U, ts(i64::from(i)), &obs);
+            tr.apply(U, ts(i64::from(i)), &obs, &mut Vec::new());
             assert_eq!(tr.budget.used(), tr.table.recount());
         }
         assert!(tr.budget.used() <= 64 * 1024);

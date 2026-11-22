@@ -1,6 +1,7 @@
 //! One JSON object per line.
 
 use std::io::{self, Write};
+use std::net::IpAddr;
 
 use jiff::tz::TimeZone;
 use overhear_decode::{Decoded, Frag, IpHeader, Mac, Packet, Problem};
@@ -10,6 +11,7 @@ use crate::json::JsonWriter;
 use crate::proto;
 use crate::source::Frame;
 use crate::time::{format_iso, format_ts};
+use crate::warn::{Baseline, Expected, Output, Warning};
 
 pub struct JsonRenderer<W: Write> {
     out: W,
@@ -51,6 +53,56 @@ impl<W: Write> JsonRenderer<W> {
     }
 }
 
+/// `ts` (epoch seconds with microseconds) and `time` (local ISO 8601, or
+/// null when not representable).
+fn ts_and_time(w: &mut JsonWriter, sec: i64, usec: u32, tz: &TimeZone) {
+    w.raw_number(Some("ts"), &format_ts(sec, usec));
+    match format_iso(sec, usec, tz) {
+        Some(t) => w.str(Some("time"), &t),
+        None => w.null(Some("time")),
+    }
+}
+
+fn warning(w: &mut JsonWriter, x: &Warning, tz: &TimeZone) {
+    w.str(Some("type"), "warning");
+    ts_and_time(w, x.ts.sec, x.ts.usec, tz);
+    w.str(Some("rule"), x.rule.as_str());
+    w.str(Some("severity"), x.severity.as_str());
+    if let Some(s) = x.segment {
+        w.str(Some("segment"), &s.to_string());
+    }
+    w.str(Some("subject"), &x.subject);
+    w.str(Some("message"), &x.message);
+    w.arr(Some("macs"));
+    for m in &x.macs {
+        w.mac(None, *m);
+    }
+    w.end();
+    w.arr(Some("addrs"));
+    for a in &x.addrs {
+        w.ip(None, *a);
+    }
+    w.end();
+    w.u64(Some("count"), u64::from(x.count));
+}
+
+fn baseline(w: &mut JsonWriter, b: &Baseline, tz: &TimeZone) {
+    w.str(Some("type"), "baseline");
+    ts_and_time(w, b.ts.sec, b.ts.usec, tz);
+    w.str(Some("segment"), &b.segment.to_string());
+    match b.what {
+        Expected::DhcpServer(ip) => {
+            w.str(Some("what"), "dhcp-server");
+            w.ip(Some("ip"), IpAddr::V4(ip));
+        }
+        Expected::Router { mac, ip } => {
+            w.str(Some("what"), "router");
+            w.ip(Some("ip"), IpAddr::V6(ip));
+            w.mac(Some("mac"), mac);
+        }
+    }
+}
+
 fn problems(w: &mut JsonWriter, list: &[Problem], frame: &[u8]) {
     if list.is_empty() {
         return;
@@ -67,7 +119,7 @@ fn problems(w: &mut JsonWriter, list: &[Problem], frame: &[u8]) {
     w.end();
 }
 
-fn endpoint(w: &mut JsonWriter, key: &str, mac: Mac, ip: Option<std::net::IpAddr>) {
+fn endpoint(w: &mut JsonWriter, key: &str, mac: Mac, ip: Option<IpAddr>) {
     w.obj(Some(key));
     w.mac(Some("mac"), mac);
     if let Some(ip) = ip {
@@ -106,11 +158,7 @@ impl<W: Write> Renderer for JsonRenderer<W> {
         w.obj(None);
         w.u64(Some("schema"), 1);
         w.str(Some("type"), "packet");
-        w.raw_number(Some("ts"), &format_ts(frame.ts_sec, frame.ts_usec));
-        match format_iso(frame.ts_sec, frame.ts_usec, &self.tz) {
-            Some(t) => w.str(Some("time"), &t),
-            None => w.null(Some("time")),
-        }
+        ts_and_time(w, frame.ts_sec, frame.ts_usec, &self.tz);
         w.u64(Some("len"), u64::from(frame.orig_len));
         let caplen = u64::try_from(frame.data.len()).unwrap_or(u64::MAX);
         if caplen < u64::from(frame.orig_len) {
@@ -125,6 +173,19 @@ impl<W: Write> Renderer for JsonRenderer<W> {
         }
         if self.hex {
             w.hex(Some("frame_hex"), &frame.data);
+        }
+        w.end();
+        self.emit()
+    }
+
+    fn output(&mut self, o: &Output) -> io::Result<()> {
+        let w = &mut self.w;
+        w.clear();
+        w.obj(None);
+        w.u64(Some("schema"), 1);
+        match o {
+            Output::Warning(x) => warning(w, x, &self.tz),
+            Output::Baseline(b) => baseline(w, b, &self.tz),
         }
         w.end();
         self.emit()
@@ -169,6 +230,10 @@ impl<W: Write> Renderer for JsonRenderer<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::observe::{Segment, Ts};
+    use crate::warn::{Rule, Severity};
+    use overhear_decode::Mac;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn status_line() {
@@ -185,5 +250,85 @@ mod tests {
             "{\"schema\":1,\"type\":\"status\",\"final\":false,\"ts\":1700000000,\
              \"kernel_drops\":3,\"channel_drops\":2,\"evictions\":0}\n"
         );
+    }
+
+    #[test]
+    fn warning_and_baseline_lines() {
+        let ts = Ts {
+            sec: 1_795_266_132,
+            usec: 10_000,
+        };
+        let warning = Warning {
+            ts,
+            rule: Rule::SecondDhcpServer,
+            severity: Severity::High,
+            segment: Some(Segment::UNTAGGED),
+            subject: "10.0.0.254".into(),
+            message: "second DHCP server 10.0.0.254 (expected 10.0.0.1)".into(),
+            macs: vec![
+                Mac([2, 0, 0x5e, 0x10, 0, 0xfe]),
+                Mac([2, 0, 0x5e, 0x10, 0, 0x39]),
+            ],
+            addrs: vec![IpAddr::V4(Ipv4Addr::new(10, 0, 0, 254))],
+            count: 4,
+        };
+        let outputs = [
+            Output::Warning(warning.clone()),
+            Output::Warning(Warning {
+                rule: Rule::CaptureDrops,
+                severity: Severity::Low,
+                segment: None,
+                subject: "capture-drops".into(),
+                message: "dropped".into(),
+                macs: Vec::new(),
+                addrs: Vec::new(),
+                count: 1,
+                ..warning
+            }),
+            Output::Baseline(Baseline {
+                ts,
+                segment: Segment::parse("200.100").expect("segment"),
+                what: Expected::DhcpServer(Ipv4Addr::new(10, 0, 0, 1)),
+            }),
+            Output::Baseline(Baseline {
+                ts,
+                segment: Segment::UNTAGGED,
+                what: Expected::Router {
+                    mac: Mac([2, 0, 0x5e, 0x10, 0, 1]),
+                    ip: "fe80::1".parse().expect("ipv6"),
+                },
+            }),
+        ];
+        let mut r = JsonRenderer::new(Vec::new(), TimeZone::UTC, false);
+        for o in &outputs {
+            r.output(o).expect("output");
+        }
+        let got = String::from_utf8(r.into_inner()).expect("utf8");
+        let head = "{\"schema\":1,";
+        let when = "\"ts\":1795266132.010000,\"time\":\"2026-11-21T13:02:12.010+00:00\"";
+        let want = [
+            format!(
+                "{head}\"type\":\"warning\",{when},\"rule\":\"second-dhcp-server\",\
+                 \"severity\":\"high\",\"segment\":\"untagged\",\"subject\":\"10.0.0.254\",\
+                 \"message\":\"second DHCP server 10.0.0.254 (expected 10.0.0.1)\",\
+                 \"macs\":[\"02:00:5e:10:00:fe\",\"02:00:5e:10:00:39\"],\
+                 \"addrs\":[\"10.0.0.254\"],\"count\":4}}"
+            ),
+            format!(
+                "{head}\"type\":\"warning\",{when},\"rule\":\"capture-drops\",\
+                 \"severity\":\"low\",\"subject\":\"capture-drops\",\"message\":\"dropped\",\
+                 \"macs\":[],\"addrs\":[],\"count\":1}}"
+            ),
+            format!(
+                "{head}\"type\":\"baseline\",{when},\"segment\":\"200.100\",\
+                 \"what\":\"dhcp-server\",\"ip\":\"10.0.0.1\"}}"
+            ),
+            format!(
+                "{head}\"type\":\"baseline\",{when},\"segment\":\"untagged\",\
+                 \"what\":\"router\",\"ip\":\"fe80::1\",\"mac\":\"02:00:5e:10:00:01\"}}"
+            ),
+        ];
+        assert_eq!(got.lines().collect::<Vec<_>>(), want);
+        assert!(got.ends_with('\n'));
     }
 }

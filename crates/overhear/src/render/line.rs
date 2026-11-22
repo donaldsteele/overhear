@@ -10,6 +10,7 @@ use super::{Renderer, Summary, TextOpts};
 use crate::proto;
 use crate::source::Frame;
 use crate::time::format_line;
+use crate::warn::{Expected, Output};
 
 pub struct LineRenderer<W: Write> {
     out: W,
@@ -44,6 +45,16 @@ impl<W: Write> Renderer for LineRenderer<W> {
     fn packet(&mut self, frame: &Frame, decoded: &Decoded<'_>) -> io::Result<()> {
         self.buf.clear();
         format_packet_line(frame, decoded, &self.opts, &mut self.buf);
+        self.out.write_all(self.buf.as_bytes())?;
+        if self.flush_each {
+            self.out.flush()?;
+        }
+        Ok(())
+    }
+
+    fn output(&mut self, o: &Output) -> io::Result<()> {
+        self.buf.clear();
+        format_output(o, &self.opts, &mut self.buf);
         self.out.write_all(self.buf.as_bytes())?;
         if self.flush_each {
             self.out.flush()?;
@@ -119,4 +130,33 @@ pub fn format_packet_line(frame: &Frame, decoded: &Decoded<'_>, opts: &TextOpts,
     if opts.hex {
         hex_dump(&frame.data, out);
     }
+}
+
+/// Appends the line for a warning or baseline, newline included. Tagged
+/// segments are shown as `[100] `.
+pub fn format_output(o: &Output, opts: &TextOpts, out: &mut String) {
+    let (ts, tag, seg) = match o {
+        Output::Warning(w) => (w.ts, "WARN", w.segment),
+        Output::Baseline(b) => (b.ts, "NOTE", Some(b.segment)),
+    };
+    out.push_str(&format_line(ts.sec, ts.usec, &opts.tz, opts.style));
+    let _ = write!(out, " {tag:<5} ");
+    if let Some(s) = seg.filter(|s| !s.is_untagged()) {
+        let _ = write!(out, "[{s}] ");
+    }
+    let _ = match o {
+        Output::Warning(w) if w.count == 1 => write!(out, "{}", w.message),
+        Output::Warning(w) => write!(
+            out,
+            "{} (repeated {} times in the last minute)",
+            w.message, w.count
+        ),
+        Output::Baseline(b) => match b.what {
+            Expected::DhcpServer(ip) => write!(out, "expected DHCP server {ip} (learned)"),
+            Expected::Router { mac, ip } => {
+                write!(out, "expected router {ip} ({mac}) (learned)")
+            }
+        },
+    };
+    out.push('\n');
 }

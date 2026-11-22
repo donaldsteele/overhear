@@ -1,10 +1,14 @@
 //! Command line.
 
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
 use clap::error::ErrorKind;
+
+use crate::observe::Segment;
+use crate::warn::{Pins, RouterId, parse_dhcp_pin, parse_router_pin};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -38,12 +42,13 @@ pub struct Args {
     /// Drop privileges to this user after opening the capture
     #[arg(short = 'Z')]
     pub user: Option<String>,
-    /// A DHCP server you expect (repeatable)
-    #[arg(long = "dhcp-server")]
-    pub dhcp_server: Vec<String>,
-    /// A router you expect (repeatable)
-    #[arg(long = "router")]
-    pub router: Vec<String>,
+    /// A DHCP server you expect, optionally on one VLAN only (repeatable)
+    #[arg(long = "dhcp-server", value_name = "IP[@VLAN]", value_parser = parse_dhcp_pin)]
+    pub dhcp_server: Vec<(Ipv4Addr, Option<Segment>)>,
+    /// An IPv6 router you expect, by MAC or link-local address, optionally on
+    /// one VLAN only (repeatable)
+    #[arg(long = "router", value_name = "MAC|IPV6[@VLAN]", value_parser = parse_router_pin)]
+    pub router: Vec<(RouterId, Option<Segment>)>,
     /// Memory budget for tracked state (K, M or G)
     #[arg(long = "max-memory", default_value = "64M", value_parser = parse_size)]
     pub max_memory: usize,
@@ -64,6 +69,14 @@ pub enum Mode {
 }
 
 impl Args {
+    /// The expected servers given with `--dhcp-server` and `--router`.
+    pub fn pins(&self) -> Pins {
+        Pins {
+            dhcp: self.dhcp_server.clone(),
+            routers: self.router.clone(),
+        }
+    }
+
     pub fn mode(&self) -> Mode {
         if self.json {
             Mode::Json

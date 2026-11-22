@@ -6,10 +6,12 @@ use std::io::{self, Write};
 use overhear_decode::{Decoded, EthKind, Frag, IpHeader, L4, Packet, Problem};
 
 use super::hex::hex_dump;
+use super::line::format_output;
 use super::{Renderer, Summary, TextOpts, problem_bytes, vlan_kind};
 use crate::proto;
 use crate::source::Frame;
 use crate::time::format_line;
+use crate::warn::Output;
 
 pub struct VerboseRenderer<W: Write> {
     out: W,
@@ -44,6 +46,16 @@ impl<W: Write> Renderer for VerboseRenderer<W> {
     fn packet(&mut self, frame: &Frame, decoded: &Decoded<'_>) -> io::Result<()> {
         self.buf.clear();
         format_block(frame, decoded, &self.opts, &mut self.buf);
+        self.out.write_all(self.buf.as_bytes())?;
+        if self.flush_each {
+            self.out.flush()?;
+        }
+        Ok(())
+    }
+
+    fn output(&mut self, o: &Output) -> io::Result<()> {
+        self.buf.clear();
+        format_output(o, &self.opts, &mut self.buf);
         self.out.write_all(self.buf.as_bytes())?;
         if self.flush_each {
             self.out.flush()?;

@@ -15,7 +15,7 @@ pub struct Ts {
 }
 
 /// The VLAN stack a frame was seen on: up to four ids, outer first.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Segment {
     ids: [u16; 4],
     len: u8,

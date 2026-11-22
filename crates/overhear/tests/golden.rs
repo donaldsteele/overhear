@@ -1,14 +1,18 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use jiff::tz::TimeZone;
-use overhear::engine::{Config, Engine, RunEnd, run_source};
+use overhear::engine::{Config, Engine, RunEnd};
 use overhear::file_source::FileSource;
+use overhear::pipeline::{self, Flow, PipelineOpts, run_threaded};
 use overhear::render::json::JsonRenderer;
 use overhear::render::line::LineRenderer;
 use overhear::render::verbose::VerboseRenderer;
 use overhear::render::{Renderer, TextOpts};
 use overhear::time::TimeStyle;
+use overhear::warn::Pins;
 
 fn data(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -24,14 +28,25 @@ fn opts() -> TextOpts {
     }
 }
 
+/// Runs the capture through the threaded pipeline as `-r` does: frame
+/// timestamps are the clock, and nothing is dropped.
 fn run(name: &str, r: &mut dyn Renderer) {
-    let mut src = FileSource::open(&data(&format!("{name}.pcap"))).expect("open pcap");
+    let src = FileSource::open(&data(&format!("{name}.pcap"))).expect("open pcap");
     let mut engine = Engine::new(Config {
         text: opts(),
         max_memory: 1 << 20,
+        pins: Pins::default(),
     });
-    let end = run_source(&mut src, &mut engine, r).expect("run");
-    assert!(matches!(end, RunEnd::Done));
+    let pipe = PipelineOpts {
+        buffers: pipeline::BUFFERS,
+        linger_after_end: false,
+        wall_clock: false,
+    };
+    let stop = Arc::new(AtomicBool::new(false));
+    let mut keep_going = |_: &mut Engine, _: &mut dyn Renderer| Ok(Flow::Continue);
+    let end =
+        run_threaded(Box::new(src), &mut engine, r, stop, pipe, &mut keep_going).expect("run");
+    assert!(matches!(end, RunEnd::Done), "{end:?}");
     r.finish(&engine.summary()).expect("finish");
 }
 

@@ -133,6 +133,48 @@ fn bad_memory_size() {
 }
 
 #[test]
+fn bad_pin_exits_1_with_reason() {
+    let pcap = data("generic.pcap");
+    for (flag, value, reason) in [
+        ("--dhcp-server", "bogus", "'bogus' is not an IPv4 address"),
+        ("--dhcp-server", "10.0.0.1@5000", "'5000' is not a VLAN"),
+        (
+            "--router",
+            "10.0.0.1",
+            "'10.0.0.1' is not a MAC or IPv6 address",
+        ),
+    ] {
+        let out = run(&["-r", pcap_arg(&pcap), flag, value]);
+        assert_eq!(out.status.code(), Some(1), "{flag} {value}");
+        assert!(
+            s(&out.stderr).contains(reason),
+            "{flag} {value}: {}",
+            s(&out.stderr)
+        );
+        assert!(out.stdout.is_empty());
+    }
+}
+
+#[test]
+fn pins_are_accepted() {
+    let golden = fs::read_to_string(data("generic.line")).expect("golden");
+    let out = run(&[
+        "-r",
+        pcap_arg(&data("generic.pcap")),
+        "--dhcp-server",
+        "10.0.0.1",
+        "--dhcp-server",
+        "10.0.0.2@100",
+        "--router",
+        "fe80::1@200.100",
+        "--router",
+        "02:00:5e:10:00:01",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", s(&out.stderr));
+    assert_eq!(s(&out.stdout), golden);
+}
+
+#[test]
 fn broken_pipe_is_quiet() {
     let frames: Vec<TFrame> = (0..20_000).map(bcast_frame).collect();
     let path = tmp("many.pcap");

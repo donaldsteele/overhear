@@ -589,6 +589,7 @@ mod tests {
                 hex: false,
             },
             max_memory: 1 << 20,
+            pins: crate::warn::Pins::default(),
         })
     }
 

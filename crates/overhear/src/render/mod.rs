@@ -12,11 +12,17 @@ use overhear_decode::Decoded;
 
 use crate::source::Frame;
 use crate::time::TimeStyle;
+use crate::warn::Output;
 
 pub trait Renderer {
     fn packet(&mut self, frame: &Frame, decoded: &Decoded<'_>) -> io::Result<()>;
     /// Drop counters grew during the run.
     fn status(&mut self, _status: &Status) -> io::Result<()> {
+        Ok(())
+    }
+    /// A warning or baseline: right after the packet that caused it, or on a
+    /// tick for a repeat summary.
+    fn output(&mut self, _o: &Output) -> io::Result<()> {
         Ok(())
     }
     fn finish(&mut self, _summary: &Summary) -> io::Result<()> {
@@ -134,6 +140,35 @@ mod tests {
                 assert!(n.get() > if on { 3 } else { 0 }, "finish must flush");
             }
         }
+    }
+
+    #[test]
+    fn outputs_flush_when_asked_and_text_modes_agree() {
+        use crate::observe::{Segment, Ts};
+        use crate::warn::{Baseline, Expected};
+        let o = Output::Baseline(Baseline {
+            ts: Ts { sec: 0, usec: 0 },
+            segment: Segment::parse("100").expect("segment"),
+            what: Expected::DhcpServer(std::net::Ipv4Addr::new(10, 0, 0, 1)),
+        });
+        for on in [true, false] {
+            let n = Rc::new(Cell::new(0));
+            for mut r in renderers(on, &n) {
+                n.set(0);
+                r.output(&o).expect("output");
+                assert_eq!(n.get(), usize::from(on));
+            }
+        }
+        let mut line = LineRenderer::new(Vec::new(), opts());
+        let mut verbose = VerboseRenderer::new(Vec::new(), opts());
+        line.output(&o).expect("output");
+        verbose.output(&o).expect("output");
+        let line = String::from_utf8(line.into_inner()).expect("utf8");
+        assert_eq!(
+            line,
+            "1970-01-01 00:00:00.000 NOTE  [100] expected DHCP server 10.0.0.1 (learned)\n"
+        );
+        assert_eq!(line, String::from_utf8(verbose.into_inner()).expect("utf8"));
     }
 
     #[test]

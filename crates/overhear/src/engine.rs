@@ -7,8 +7,9 @@ use overhear_decode::decode;
 use crate::observe::{Observation, Segment, Ts};
 use crate::proto::observe;
 use crate::render::{Renderer, Status, Summary, TextOpts};
-use crate::source::{Frame, Next, Source, SourceError, SourceStats};
+use crate::source::{Frame, SourceError, SourceStats};
 use crate::track::Tracker;
+use crate::warn::{Output, Pins};
 
 /// Empties `v` and hands back its allocation under another lifetime.
 fn reuse<'a, 'b>(mut v: Vec<Observation<'a>>) -> Vec<Observation<'b>> {
@@ -23,6 +24,8 @@ pub struct Config {
     pub text: TextOpts,
     /// Budget for everything remembered about the network, in bytes.
     pub max_memory: usize,
+    /// Expected DHCP servers and routers from the command line.
+    pub pins: Pins,
 }
 
 pub struct Engine {
@@ -35,13 +38,17 @@ pub struct Engine {
     tracker: Tracker,
     /// Observations of the frame being handled; always empty between frames.
     scratch: Vec<Observation<'static>>,
+    /// Warnings and baselines waiting to be rendered; always empty between
+    /// calls.
+    outputs: Vec<Output>,
 }
 
 impl Engine {
     pub fn new(cfg: Config) -> Engine {
         Engine {
-            tracker: Tracker::new(cfg.max_memory),
+            tracker: Tracker::new(cfg.max_memory, cfg.pins.clone()),
             scratch: Vec::new(),
+            outputs: Vec::new(),
             cfg,
             packets: 0,
             kernel_drops: 0,
@@ -59,11 +66,22 @@ impl Engine {
                 sec: f.ts_sec,
                 usec: f.ts_usec,
             };
-            self.tracker
-                .apply(Segment::from_vlans(&p.eth.vlans), ts, &obs);
+            let seg = Segment::from_vlans(&p.eth.vlans);
+            self.tracker.apply(seg, ts, &obs, &mut self.outputs);
             self.scratch = reuse(obs);
         }
-        r.packet(f, &decoded)
+        if let Err(e) = r.packet(f, &decoded) {
+            self.outputs.clear();
+            return Err(e);
+        }
+        self.render_outputs(r)
+    }
+
+    /// Renders the waiting warnings and baselines, in order, and clears them.
+    fn render_outputs(&mut self, r: &mut dyn Renderer) -> io::Result<()> {
+        let done = self.outputs.iter().try_for_each(|o| r.output(o));
+        self.outputs.clear();
+        done
     }
 
     pub fn tracker(&self) -> &Tracker {
@@ -96,10 +114,11 @@ impl Engine {
     }
 
     /// Called about once a second with the current time (seconds since the
-    /// epoch), for work that is due by time rather than by packet. Nothing is
-    /// due yet.
-    pub fn tick(&mut self, _now: i64, _r: &mut dyn Renderer) -> io::Result<()> {
-        Ok(())
+    /// epoch), for work that is due by time rather than by packet: renders
+    /// the warning summaries that are due.
+    pub fn tick(&mut self, now: i64, r: &mut dyn Renderer) -> io::Result<()> {
+        self.tracker.tick(now, &mut self.outputs);
+        self.render_outputs(r)
     }
 
     pub fn summary(&self) -> Summary {
@@ -125,29 +144,6 @@ pub enum RunEnd {
 pub enum RunError {
     Source(SourceError),
     Io(io::Error),
-}
-
-/// Feeds every frame of `src` to the engine until the source ends. The caller
-/// calls `Renderer::finish`.
-pub fn run_source(
-    src: &mut dyn Source,
-    engine: &mut Engine,
-    r: &mut dyn Renderer,
-) -> Result<RunEnd, RunError> {
-    let mut frame = Frame::default();
-    loop {
-        match src.next_into(&mut frame) {
-            Ok(Next::Frame) => match engine.frame(&frame, r) {
-                Ok(()) => {}
-                Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return Ok(RunEnd::Closed),
-                Err(e) => return Err(RunError::Io(e)),
-            },
-            Ok(Next::Timeout) => {}
-            Ok(Next::End) => return Ok(RunEnd::Done),
-            Err(SourceError::Truncated(m)) => return Ok(RunEnd::Truncated(m)),
-            Err(e) => return Err(RunError::Source(e)),
-        }
-    }
 }
 
 impl std::fmt::Display for RunError {
@@ -191,6 +187,7 @@ mod tests {
                 hex: false,
             },
             max_memory: 1 << 20,
+            pins: Pins::default(),
         })
     }
 
@@ -220,6 +217,87 @@ mod tests {
         assert_eq!((s.devices, s.evictions), (2, 0));
         assert_eq!(e.tracker().budget.used(), e.tracker().table.recount());
     }
+
+    /// Records what was rendered, in order; packets can fail with BrokenPipe.
+    #[derive(Default)]
+    struct Events {
+        seen: Vec<String>,
+        broken_pipe: bool,
+    }
+
+    impl Renderer for Events {
+        fn packet(&mut self, _f: &Frame, _d: &Decoded<'_>) -> io::Result<()> {
+            if self.broken_pipe {
+                return Err(io::ErrorKind::BrokenPipe.into());
+            }
+            self.seen.push("packet".into());
+            Ok(())
+        }
+
+        fn output(&mut self, o: &Output) -> io::Result<()> {
+            self.seen.push(match o {
+                Output::Warning(w) => format!("{} x{}", w.message, w.count),
+                Output::Baseline(_) => "baseline".into(),
+            });
+            Ok(())
+        }
+    }
+
+    /// An OFFER from 10.0.0.{sid}.
+    fn offer(sid: u8) -> Observation<'static> {
+        Observation::DhcpReply {
+            client: overhear_decode::Mac([2, 0, 0, 0, 0, 0x39]),
+            server_mac: overhear_decode::Mac([2, 0, 0, 0, 0, sid]),
+            server_id: std::net::Ipv4Addr::new(10, 0, 0, sid),
+            msg_type: 2,
+            router: None,
+        }
+    }
+
+    #[test]
+    fn outputs_render_right_after_their_packet() {
+        let mut e = engine();
+        let mut sink = Vec::new();
+        let t0 = Ts { sec: 0, usec: 0 };
+        e.tracker
+            .apply(Segment::UNTAGGED, t0, &[offer(9)], &mut sink);
+        // As if the frame below had caused them.
+        e.outputs = sink;
+        let mut r = Events::default();
+        e.frame(&Frame::default(), &mut r).expect("frame");
+        e.frame(&Frame::default(), &mut r).expect("frame");
+        assert_eq!(r.seen, ["packet", "baseline", "packet"]);
+
+        // A failed packet drops its outputs too.
+        let (seg, obs) = (Segment::UNTAGGED, [offer(9), offer(8)]);
+        e.tracker.apply(seg, t0, &obs, &mut e.outputs);
+        assert_eq!(e.outputs.len(), 1);
+        r.broken_pipe = true;
+        assert!(e.frame(&Frame::default(), &mut r).is_err());
+        assert!(e.outputs.is_empty());
+    }
+
+    #[test]
+    fn tick_renders_due_summaries() {
+        let mut e = engine();
+        let mut sink = Vec::new();
+        for (sid, sec) in [(1, 0), (9, 1), (9, 2), (9, 3)] {
+            let ts = Ts { sec, usec: 0 };
+            e.tracker
+                .apply(Segment::UNTAGGED, ts, &[offer(sid)], &mut sink);
+        }
+        assert_eq!(sink.len(), 2, "{sink:?}");
+        let mut r = Events::default();
+        e.tick(60, &mut r).expect("tick");
+        assert!(r.seen.is_empty());
+        e.tick(61, &mut r).expect("tick");
+        assert_eq!(
+            r.seen,
+            ["second DHCP server 10.0.0.9 (expected 10.0.0.1) x2"]
+        );
+        assert!(e.outputs.is_empty());
+    }
+
     #[test]
     fn stats_render_a_status_only_when_drops_grow() {
         let mut e = engine();

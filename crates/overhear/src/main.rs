@@ -91,6 +91,7 @@ fn main() -> ExitCode {
     let mut engine = Engine::new(Config {
         text: text.clone(),
         max_memory: args.max_memory,
+        pins: args.pins(),
     });
     // Packets must reach a terminal or pipe at once; a regular file can wait.
     let out = BufWriter::new(io::stdout());
