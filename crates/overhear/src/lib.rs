@@ -12,3 +12,4 @@ pub mod render;
 pub mod source;
 pub mod time;
 pub mod track;
+pub mod vendor;
