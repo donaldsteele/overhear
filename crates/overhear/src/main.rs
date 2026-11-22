@@ -15,6 +15,7 @@ use overhear::render::verbose::VerboseRenderer;
 use overhear::render::{Renderer, TextOpts};
 use overhear::source::LinkType;
 use overhear::time::TimeStyle;
+use overhear::tui;
 
 /// Writes `overhear: {msg}` to stderr. A closed stderr is ignored: there is
 /// nowhere left to complain.
@@ -93,16 +94,6 @@ fn main() -> ExitCode {
         max_memory: args.max_memory,
         pins: args.pins(),
     });
-    // Packets must reach a terminal or pipe at once; a regular file can wait.
-    let out = BufWriter::new(io::stdout());
-    let flush = !platform::stdout_is_file();
-    let mut renderer: Box<dyn Renderer> = match mode {
-        Mode::Line => Box::new(LineRenderer::new(out, text).flush_each(flush)),
-        Mode::Verbose => Box::new(VerboseRenderer::new(out, text).flush_each(flush)),
-        Mode::Json => Box::new(JsonRenderer::new(out, text.tz, args.hex).flush_each(flush)),
-        Mode::Tui => return fail("-t is not available yet"),
-    };
-
     // SIGINT and SIGTERM end the run normally, after the frames already
     // captured are shown.
     let stop = Arc::new(AtomicBool::new(false));
@@ -117,6 +108,37 @@ fn main() -> ExitCode {
     if let Err(e) = ctrlc::set_handler(handler) {
         return fail(format!("cannot handle signals: {e}"));
     }
+
+    if mode == Mode::Tui {
+        let label = match &args.read {
+            Some(p) => p.file_name().map_or_else(
+                || p.display().to_string(),
+                |n| n.to_string_lossy().into_owned(),
+            ),
+            None => args.iface.clone().unwrap_or_else(|| "default".into()),
+        };
+        return match tui::run(src, &mut engine, stop, label, live) {
+            Ok(RunEnd::Done | RunEnd::Closed) => ExitCode::SUCCESS,
+            Ok(RunEnd::Truncated(_)) => fail(format!(
+                "{}: truncated capture file",
+                args.read
+                    .as_deref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            )),
+            Err(e) => fail(e),
+        };
+    }
+
+    // Packets must reach a terminal or pipe at once; a regular file can wait.
+    let out = BufWriter::new(io::stdout());
+    let flush = !platform::stdout_is_file();
+    let mut renderer: Box<dyn Renderer> = match mode {
+        Mode::Line => Box::new(LineRenderer::new(out, text).flush_each(flush)),
+        Mode::Verbose => Box::new(VerboseRenderer::new(out, text).flush_each(flush)),
+        Mode::Json => Box::new(JsonRenderer::new(out, text.tz, args.hex).flush_each(flush)),
+        Mode::Tui => unreachable!("handled above"),
+    };
 
     let opts = PipelineOpts {
         buffers: pipeline::BUFFERS,
