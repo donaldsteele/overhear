@@ -2,7 +2,11 @@
 //! expected DHCP server and default router, and produces warnings and
 //! baselines for the renderers.
 
+mod conflict;
 mod dhcp;
+mod index;
+mod lru;
+mod names;
 pub mod pins;
 mod repeat;
 mod router;
@@ -16,7 +20,10 @@ pub use pins::{Pins, RouterId, parse_dhcp_pin, parse_router_pin};
 
 use crate::observe::{Observation, Segment, Ts};
 use crate::track::Budget;
+use conflict::Claims;
 use dhcp::Dhcp;
+use index::Index;
+use names::Names;
 use repeat::Repeats;
 use segments::Segments;
 
@@ -100,6 +107,14 @@ const MAX_REPEAT_KEYS: usize = 4096;
 /// Segments with learned state kept; when full, the least recently used
 /// segment's state goes and is learned again later.
 const MAX_SEGMENTS: usize = 256;
+/// Address claims kept (see [`lru`]).
+const MAX_CLAIMS: usize = 65536;
+/// Name answers kept.
+const MAX_ANSWERS: usize = 16384;
+/// Hosts with a name set kept.
+const MAX_HOSTS: usize = 4096;
+/// Each of the three above also stays within this fraction of the budget.
+const SHARE: usize = 16;
 
 /// Runs the rules. Everything it learns is charged to the shared [`Budget`].
 pub struct WarnEngine {
@@ -107,6 +122,9 @@ pub struct WarnEngine {
     segments: Segments,
     dhcp: Dhcp,
     repeats: Repeats,
+    claims: Claims,
+    names: Names,
+    index: Index,
 }
 
 impl WarnEngine {
@@ -116,6 +134,9 @@ impl WarnEngine {
             segments: Segments::new(),
             dhcp: Dhcp::new(),
             repeats: Repeats::new(),
+            claims: conflict::new(MAX_CLAIMS),
+            names: Names::new(MAX_ANSWERS, MAX_HOSTS),
+            index: Index::new(),
         }
     }
 
@@ -130,19 +151,36 @@ impl WarnEngine {
         out: &mut Vec<Output>,
     ) {
         let segs = &mut self.segments;
-        let found = match obs {
-            Observation::DhcpReply { .. } => {
-                self.dhcp.reply(&self.pins, segs, seg, ts, obs, budget)
-            }
+        let found: [Option<Output>; 2] = match obs {
+            Observation::DhcpReply { .. } => [
+                self.dhcp.reply(&self.pins, segs, seg, ts, obs, budget),
+                None,
+            ],
             Observation::RouterAdvert { .. } => {
-                router::advert(&self.pins, segs, seg, ts, obs, budget)
+                [router::advert(&self.pins, segs, seg, ts, obs, budget), None]
             }
-            _ => None,
+            Observation::Claim { .. } => [
+                conflict::claim(
+                    &mut self.claims,
+                    &mut self.index,
+                    seg,
+                    ts,
+                    obs,
+                    budget,
+                    |ip| conflict::expected(&self.pins, segs, seg, ip),
+                ),
+                None,
+            ],
+            Observation::NameAnswer { .. } => {
+                self.names.answer(&mut self.index, seg, ts, obs, budget)
+            }
+            _ => [None, None],
         };
-        match found {
-            Some(Output::Warning(w)) => self.repeats.report(w, budget, out),
-            Some(b) => out.push(b),
-            None => {}
+        for f in found.into_iter().flatten() {
+            match f {
+                Output::Warning(w) => self.repeats.report(w, budget, out),
+                b => out.push(b),
+            }
         }
     }
 
@@ -156,10 +194,48 @@ impl WarnEngine {
         self.repeats.flush(now, budget, out);
     }
 
-    /// Drops what is kept about `mac` once the device table evicted it.
+    /// Reports a problem of overhear's own (not about any segment): Low,
+    /// repeat-limited like the other warnings.
+    pub fn operational(
+        &mut self,
+        ts: Ts,
+        rule: Rule,
+        message: String,
+        budget: &mut Budget,
+        out: &mut Vec<Output>,
+    ) {
+        let w = Warning {
+            ts,
+            rule,
+            severity: Severity::Low,
+            segment: None,
+            subject: rule.as_str().to_owned(),
+            message,
+            macs: Vec::new(),
+            addrs: Vec::new(),
+            count: 1,
+        };
+        self.repeats.report(w, budget, out);
+    }
+
+    /// Drops what is kept about `mac` once the device table evicted it: its
+    /// claims, name answers and name sets, found through the index.
     /// Learned expected servers and routers stay: forgetting them in a MAC
     /// flood would make whoever speaks next the trusted one.
-    pub fn forget(&mut self, _mac: &Mac, _budget: &mut Budget) {}
+    pub fn forget(&mut self, mac: &Mac, budget: &mut Budget) {
+        let Some(keys) = self.index.take(mac, budget) else {
+            return;
+        };
+        for k in &keys.claims {
+            self.claims.remove(k, budget);
+        }
+        for k in &keys.answers {
+            self.names.answers.remove(k, budget);
+        }
+        for seg in &keys.hosts {
+            self.names.hosts.remove(&(*seg, *mac), budget);
+        }
+    }
 
     /// Never evicted from the device table: routers pinned by MAC, and the
     /// senders of replies from pinned DHCP servers.
@@ -181,12 +257,27 @@ impl WarnEngine {
     /// Bytes of state, counted from scratch; what this engine has charged to
     /// the budget.
     pub fn cost(&self) -> usize {
-        self.segments.cost() + self.dhcp.cost() + self.repeats.cost()
+        self.segments.cost()
+            + self.dhcp.cost()
+            + self.repeats.cost()
+            + self.claims.cost()
+            + self.names.answers.cost()
+            + self.names.hosts.cost()
+            + self.index.cost()
     }
 
     #[cfg(test)]
     pub(crate) fn repeat_keys(&self) -> usize {
         self.repeats.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn state_sizes(&self) -> (usize, usize, usize) {
+        (
+            self.claims.len(),
+            self.names.answers.len(),
+            self.names.hosts.len(),
+        )
     }
 
     #[cfg(test)]
@@ -198,6 +289,7 @@ impl WarnEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::observe::AnswerKind;
     use crate::render::line::LineRenderer;
     use crate::render::{Renderer, TextOpts};
     use crate::time::TimeStyle;
@@ -894,5 +986,371 @@ mod tests {
             (Severity::Low.as_str(), Severity::High.as_str()),
             ("low", "high")
         );
+    }
+    fn claim(mac: Mac, ip: IpAddr) -> Observation<'static> {
+        Observation::Claim { mac, ip }
+    }
+
+    fn claim4(m: u8, a: &str) -> Observation<'static> {
+        claim(mac(m), IpAddr::V4(ip(a)))
+    }
+
+    #[test]
+    fn claim_change_warns_low_with_age() {
+        let mut r = Rig::new(Pins::default());
+        assert_eq!(r.see(U, 0, &claim4(0x0a, "10.0.0.5")), []);
+        let out = r.see(U, 180, &claim4(0x0b, "10.0.0.5"));
+        assert_eq!(
+            only_warning(&out),
+            &Warning {
+                ts: t(180),
+                rule: Rule::AddressConflict,
+                severity: Severity::Low,
+                segment: Some(U),
+                subject: "10.0.0.5".into(),
+                message: "10.0.0.5 now claimed by 02:00:5e:10:00:0b, was 02:00:5e:10:00:0a 3m ago"
+                    .into(),
+                macs: vec![mac(0x0b), mac(0x0a)],
+                addrs: vec![IpAddr::V4(ip("10.0.0.5"))],
+                count: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn claim_age_units() {
+        for (gap, want) in [
+            (59, "59s"),
+            (60, "1m"),
+            (3599, "59m"),
+            (3600, "1h"),
+            (7300, "2h"),
+        ] {
+            let mut r = Rig::new(Pins::default());
+            r.see(U, 0, &claim4(1, "10.0.0.5"));
+            let out = r.see(U, gap, &claim4(2, "10.0.0.5"));
+            assert!(
+                only_warning(&out).message.ends_with(&format!("{want} ago")),
+                "{gap}"
+            );
+        }
+        // Time going backwards counts as no time.
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 100, &claim4(1, "10.0.0.5"));
+        let out = r.see(U, 50, &claim4(2, "10.0.0.5"));
+        assert!(only_warning(&out).message.ends_with("0s ago"));
+    }
+
+    #[test]
+    fn claim_on_learned_dhcp_server_is_high() {
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &reply(ip("10.0.0.1"), 2));
+        r.see(U, 1, &claim4(1, "10.0.0.1"));
+        let out = r.see(U, 2, &claim4(9, "10.0.0.1"));
+        assert_eq!(only_warning(&out).severity, Severity::High);
+        // Another segment learned nothing: Low.
+        r.see(seg("5"), 3, &claim4(1, "10.0.0.1"));
+        let out = r.see(seg("5"), 4, &claim4(9, "10.0.0.1"));
+        assert_eq!(only_warning(&out).severity, Severity::Low);
+    }
+
+    #[test]
+    fn claim_on_pinned_dhcp_server_is_high() {
+        let mut r = Rig::new(dhcp_pin("10.0.0.1@100"));
+        r.see(seg("100"), 1, &claim4(1, "10.0.0.1"));
+        let out = r.see(seg("100"), 2, &claim4(9, "10.0.0.1"));
+        assert_eq!(only_warning(&out).severity, Severity::High);
+    }
+
+    #[test]
+    fn claim_on_gateway_from_router_option_is_high() {
+        let mut r = Rig::new(Pins::default());
+        let with_router = Observation::DhcpReply {
+            client: CLIENT,
+            server_mac: mac(1),
+            server_id: ip("10.0.0.1"),
+            msg_type: 5,
+            router: Some(ip("10.0.0.254")),
+        };
+        r.see(U, 0, &with_router);
+        r.see(U, 1, &claim4(0xfe, "10.0.0.254"));
+        let out = r.see(U, 2, &claim4(9, "10.0.0.254"));
+        assert_eq!(only_warning(&out).severity, Severity::High);
+    }
+
+    #[test]
+    fn claim_on_expected_router_address_is_high() {
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &advert(1, 1800, false, false));
+        let a = IpAddr::V6(ip6("fe80::1"));
+        r.see(U, 1, &claim(mac(1), a));
+        let out = r.see(U, 2, &claim(mac(9), a));
+        assert_eq!(only_warning(&out).severity, Severity::High);
+        let mut pins = Pins::default();
+        pins.routers.push(parse_router_pin("fe80::7").expect("pin"));
+        let mut r = Rig::new(pins);
+        let a = IpAddr::V6(ip6("fe80::7"));
+        r.see(U, 1, &claim(mac(1), a));
+        let out = r.see(U, 2, &claim(mac(9), a));
+        assert_eq!(only_warning(&out).severity, Severity::High);
+    }
+
+    #[test]
+    fn same_mac_reclaim_is_quiet() {
+        let mut r = Rig::new(Pins::default());
+        for sec in 0..5 {
+            assert_eq!(r.see(U, sec, &claim4(1, "10.0.0.5")), []);
+        }
+    }
+
+    #[test]
+    fn claims_are_per_segment() {
+        let mut r = Rig::new(Pins::default());
+        r.see(seg("1"), 0, &claim4(1, "10.0.0.5"));
+        assert_eq!(r.see(seg("2"), 1, &claim4(2, "10.0.0.5")), []);
+    }
+
+    #[test]
+    fn ipv6_claim_conflict_warns() {
+        let mut r = Rig::new(Pins::default());
+        let a = IpAddr::V6(ip6("2001:db8::5"));
+        r.see(U, 0, &claim(mac(1), a));
+        let out = r.see(U, 30, &claim(mac(2), a));
+        let w = only_warning(&out);
+        assert_eq!(w.subject, "2001:db8::5");
+        assert_eq!(w.severity, Severity::Low);
+        assert_eq!(w.addrs, [a]);
+        assert!(w.message.starts_with("2001:db8::5 now claimed by "));
+    }
+
+    fn answer(m: u8, kind: AnswerKind, name: &[u8], data: &[u8]) -> Observation<'static> {
+        Observation::NameAnswer {
+            mac: mac(m),
+            kind,
+            name: name.to_vec().into(),
+            data: data.to_vec().into(),
+        }
+    }
+
+    #[test]
+    fn name_answered_by_two_hosts_warns() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Llmnr;
+        assert_eq!(
+            r.see(U, 0, &answer(1, k, b"FileServer", &[10, 0, 0, 1])),
+            []
+        );
+        let out = r.see(U, 10, &answer(2, k, b"fileserver", &[10, 0, 0, 2]));
+        assert_eq!(
+            only_warning(&out),
+            &Warning {
+                ts: t(10),
+                rule: Rule::SuspiciousNameAnswers,
+                severity: Severity::Low,
+                segment: Some(U),
+                subject: "fileserver".into(),
+                message: "name fileserver answered by 02:00:5e:10:00:02 and 02:00:5e:10:00:01"
+                    .into(),
+                macs: vec![mac(2), mac(1)],
+                addrs: vec![],
+                count: 1,
+            }
+        );
+        // The newest answer is recorded: the first host is now the earlier one
+        // (a minute later, so the repeat limit lets it through).
+        let out = r.see(U, 100, &answer(1, k, b"fileserver", &[10, 0, 0, 1]));
+        assert_eq!(
+            only_warning(&out).message,
+            "name fileserver answered by 02:00:5e:10:00:01 and 02:00:5e:10:00:02"
+        );
+    }
+
+    #[test]
+    fn name_in_warning_is_escaped() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Netbios;
+        r.see(U, 0, &answer(1, k, b"A\x1b[31mB", &[1]));
+        let out = r.see(U, 1, &answer(2, k, b"a\x1b[31mb", &[2]));
+        let w = only_warning(&out);
+        assert!(
+            !w.subject.contains('\x1b') && !w.message.contains('\x1b'),
+            "{w:?}"
+        );
+        assert!(
+            w.subject.contains("\\x1b") || w.subject.contains("\\u"),
+            "{}",
+            w.subject
+        );
+    }
+
+    #[test]
+    fn name_answers_301s_apart_are_quiet() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Llmnr;
+        r.see(U, 0, &answer(1, k, b"x", &[1]));
+        assert_eq!(r.see(U, 301, &answer(2, k, b"x", &[2])), []);
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &answer(1, k, b"x", &[1]));
+        assert_eq!(warnings(&r.see(U, 300, &answer(2, k, b"x", &[2]))).len(), 1);
+    }
+
+    #[test]
+    fn same_data_is_quiet() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Netbios;
+        r.see(U, 0, &answer(1, k, b"x", &[1, 2]));
+        assert_eq!(r.see(U, 1, &answer(2, k, b"x", &[1, 2])), []);
+    }
+
+    #[test]
+    fn answers_of_different_kinds_or_segments_are_separate() {
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &answer(1, AnswerKind::Llmnr, b"x", &[1]));
+        assert_eq!(r.see(U, 1, &answer(2, AnswerKind::Netbios, b"x", &[2])), []);
+        assert_eq!(
+            r.see(seg("3"), 1, &answer(2, AnswerKind::Llmnr, b"x", &[2])),
+            []
+        );
+    }
+
+    #[test]
+    fn poisoning_pattern_is_high() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Llmnr;
+        assert_eq!(r.see(U, 0, &answer(7, k, b"wpad", &[1])), []);
+        assert_eq!(r.see(U, 60, &answer(7, k, b"FileServer", &[1])), []);
+        let out = r.see(U, 120, &answer(7, k, b"printer", &[1]));
+        assert_eq!(
+            only_warning(&out),
+            &Warning {
+                ts: t(120),
+                rule: Rule::SuspiciousNameAnswers,
+                severity: Severity::High,
+                segment: Some(U),
+                subject: "02:00:5e:10:00:07".into(),
+                message: "02:00:5e:10:00:07 answers LLMNR queries for many names \
+                          (wpad, fileserver, printer): the pattern of poisoning tools \
+                          such as Responder"
+                    .into(),
+                macs: vec![mac(7)],
+                addrs: vec![],
+                count: 1,
+            }
+        );
+        // A 4th name within the minute is repeat-limited.
+        assert_eq!(
+            warnings(&r.see(U, 150, &answer(7, k, b"proxy", &[1]))).len(),
+            0
+        );
+        // A repeated name adds nothing.
+        assert_eq!(r.see(U, 151, &answer(7, k, b"proxy", &[1])), []);
+    }
+
+    #[test]
+    fn poisoning_names_expire_and_netbios_is_worded() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Netbios;
+        r.see(U, 0, &answer(7, k, b"A", &[1]));
+        r.see(U, 100, &answer(7, k, b"B", &[1]));
+        // "A" is older than 300 s by now: only two names are live.
+        assert_eq!(r.see(U, 301, &answer(7, k, b"C", &[1])), []);
+        let out = r.see(U, 302, &answer(7, k, b"D", &[1]));
+        assert!(
+            only_warning(&out)
+                .message
+                .contains("NetBIOS queries for many names (b, c, d)")
+        );
+    }
+
+    #[test]
+    fn mdns_unique_not_counted_for_pattern() {
+        let mut r = Rig::new(Pins::default());
+        for (i, n) in [&b"a"[..], b"b", b"c", b"d"].into_iter().enumerate() {
+            let sec = i64::try_from(i).expect("small");
+            assert_eq!(
+                r.see(U, sec, &answer(7, AnswerKind::MdnsUnique, n, &[1])),
+                []
+            );
+        }
+    }
+
+    #[test]
+    fn forget_releases_budget() {
+        let mut r = Rig::new(Pins::default());
+        let before = r.b.used();
+        r.see(U, 0, &claim4(0x0a, "10.0.0.5"));
+        r.see(U, 0, &claim(mac(0x0a), IpAddr::V6(ip6("2001:db8::5"))));
+        r.see(U, 0, &answer(0x0a, AnswerKind::Llmnr, b"wpad", &[1]));
+        assert!(r.b.used() > before);
+        r.w.forget(&mac(0x0a), &mut r.b);
+        assert_eq!(r.b.used(), before);
+        assert_eq!(r.b.used(), r.w.cost());
+        assert_eq!(r.w.cost(), 0);
+        assert_eq!(r.see(U, 1, &claim4(0x0b, "10.0.0.5")), []);
+        assert_eq!(
+            r.see(U, 1, &answer(0x0b, AnswerKind::Llmnr, b"wpad", &[2])),
+            []
+        );
+    }
+
+    #[test]
+    fn forget_keeps_other_hosts_state() {
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &claim4(1, "10.0.0.5"));
+        r.see(U, 0, &claim4(2, "10.0.0.6"));
+        r.w.forget(&mac(1), &mut r.b);
+        assert_eq!(warnings(&r.see(U, 1, &claim4(3, "10.0.0.6"))).len(), 1);
+    }
+
+    #[test]
+    fn moved_claim_is_forgotten_with_its_new_owner_only() {
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &claim4(1, "10.0.0.5"));
+        r.see(U, 1, &claim4(2, "10.0.0.5"));
+        r.w.forget(&mac(1), &mut r.b);
+        assert_eq!(warnings(&r.see(U, 100, &claim4(3, "10.0.0.5"))).len(), 1);
+        r.w.forget(&mac(2), &mut r.b);
+        r.w.forget(&mac(3), &mut r.b);
+        // Only the repeat limiter's keys are left.
+        assert_eq!(r.b.used(), r.w.cost());
+        assert_eq!(r.w.state_sizes(), (0, 0, 0));
+        assert_eq!(r.w.cost(), r.w.repeats.cost());
+    }
+
+    #[test]
+    fn operational_warnings_are_low_and_repeat_limited() {
+        let mut r = Rig::new(Pins::default());
+        let mut out = Vec::new();
+        r.w.operational(
+            t(5),
+            Rule::CaptureDrops,
+            "7 frames dropped".into(),
+            &mut r.b,
+            &mut out,
+        );
+        assert_eq!(
+            only_warning(&out),
+            &Warning {
+                ts: t(5),
+                rule: Rule::CaptureDrops,
+                severity: Severity::Low,
+                segment: None,
+                subject: "capture-drops".into(),
+                message: "7 frames dropped".into(),
+                macs: vec![],
+                addrs: vec![],
+                count: 1,
+            }
+        );
+        out.clear();
+        r.w.operational(
+            t(6),
+            Rule::CaptureDrops,
+            "8 frames dropped".into(),
+            &mut r.b,
+            &mut out,
+        );
+        assert_eq!(out, []);
+        assert_eq!(r.b.used(), r.w.cost());
     }
 }

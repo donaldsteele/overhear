@@ -124,7 +124,7 @@ pub enum Role {
     DhcpServer,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AnswerKind {
     Llmnr,
     Netbios,

@@ -11,7 +11,7 @@ pub use device::Device;
 pub use table::DeviceTable;
 
 use crate::observe::{Observation, Segment, Ts};
-use crate::warn::{Output, Pins, WarnEngine};
+use crate::warn::{Output, Pins, Rule, WarnEngine};
 
 pub const MAX_IPV4: usize = 16;
 pub const MAX_IPV6: usize = 16;
@@ -43,6 +43,7 @@ impl Tracker {
     /// recently heard unprotected devices until the budget holds (the last
     /// device always stays).
     pub fn apply(&mut self, seg: Segment, ts: Ts, obs: &[Observation], out: &mut Vec<Output>) {
+        let mut evicted = false;
         for o in obs {
             self.table.apply(seg, ts, o, &mut self.budget);
             self.warn.observe(seg, ts, o, &mut self.budget, out);
@@ -55,7 +56,18 @@ impl Tracker {
                     break;
                 };
                 self.warn.forget(&gone, &mut self.budget);
+                evicted = true;
             }
+        }
+        if evicted {
+            self.warn.operational(
+                ts,
+                Rule::MemoryEviction,
+                "device table full, dropping least recently heard devices: possible MAC flood"
+                    .into(),
+                &mut self.budget,
+                out,
+            );
         }
     }
 
@@ -75,7 +87,8 @@ impl Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observe::ProtoTag;
+    use crate::observe::{AnswerKind, ProtoTag};
+    use crate::warn::Severity;
     use overhear_decode::Mac;
     use std::net::Ipv4Addr;
 
@@ -88,6 +101,189 @@ mod tests {
             mac,
             proto: ProtoTag::Other,
         }
+    }
+
+    fn flooded(tr: &mut Tracker, n: u32, secs: i64) -> Vec<Output> {
+        let mut out = Vec::new();
+        for i in 0..n {
+            let b = i.to_be_bytes();
+            let m = Mac([0x00, 0x16, b[0], b[1], b[2], b[3]]);
+            let at = ts(i64::from(i) * secs / i64::from(n));
+            tr.apply(Segment::UNTAGGED, at, &[heard(m)], &mut out);
+        }
+        out
+    }
+
+    #[test]
+    fn eviction_warning_once_a_minute() {
+        let mut tr = Tracker::new(64 * 1024, Pins::default());
+        let out = flooded(&mut tr, 10_000, 30);
+        assert!(tr.table.evictions() > 0);
+        let evictions: Vec<_> = out
+            .iter()
+            .filter(|o| matches!(o, Output::Warning(w) if w.rule == Rule::MemoryEviction))
+            .collect();
+        assert_eq!(evictions.len(), 1, "{out:?}");
+        let Output::Warning(w) = evictions[0] else {
+            unreachable!()
+        };
+        assert_eq!(w.severity, Severity::Low);
+        assert_eq!(w.segment, None);
+        assert_eq!(w.subject, "memory-eviction");
+        assert_eq!(
+            w.message,
+            "device table full, dropping least recently heard devices: possible MAC flood"
+        );
+        // A minute on, the next eviction is reported again.
+        let mut more = Vec::new();
+        for i in 0..2000u32 {
+            let m = Mac([0x00, 0x17, 0, 0, (i >> 8) as u8, i as u8]);
+            tr.apply(Segment::UNTAGGED, ts(100), &[heard(m)], &mut more);
+        }
+        assert_eq!(more.len(), 1);
+    }
+
+    #[test]
+    fn budget_recount_includes_warn_state() {
+        let mut tr = Tracker::new(64 * 1024, Pins::default());
+        let mut out = Vec::new();
+        for i in 0..3000u32 {
+            let m = Mac([0x02, 0, 0, 0, (i >> 8) as u8, i as u8]);
+            let n = (i % 7) as u8;
+            let obs = [
+                heard(m),
+                Observation::Claim {
+                    mac: m,
+                    ip: Ipv4Addr::new(10, 0, n, (i % 50) as u8).into(),
+                },
+                Observation::NameAnswer {
+                    mac: m,
+                    kind: AnswerKind::Llmnr,
+                    name: format!("host{}", i % 40).into_bytes().into(),
+                    data: vec![n].into(),
+                },
+            ];
+            tr.apply(Segment::UNTAGGED, ts(i64::from(i)), &obs, &mut out);
+            assert_eq!(
+                tr.budget.used(),
+                tr.table.recount() + tr.warn.cost(),
+                "after {i}"
+            );
+        }
+        assert!(tr.table.evictions() > 0);
+        assert!(tr.warn.cost() > 0);
+    }
+
+    fn claim_flood(tr: &mut Tracker, n: u32) {
+        let mut out = Vec::new();
+        for i in 0..n {
+            let m = Mac([0x02, 0, 0, 0, 0, (i % 100) as u8]);
+            let ip = Ipv4Addr::from(0x0a00_0000 + i);
+            let o = Observation::Claim {
+                mac: m,
+                ip: ip.into(),
+            };
+            tr.warn
+                .observe(Segment::UNTAGGED, ts(0), &o, &mut tr.budget, &mut out);
+        }
+    }
+
+    fn seed_devices(tr: &mut Tracker, n: u8) {
+        let mut out = Vec::new();
+        for i in 0..n {
+            let m = Mac([0x02, 0, 0, 0, 0, i]);
+            tr.apply(Segment::UNTAGGED, ts(0), &[heard(m)], &mut out);
+        }
+    }
+
+    #[test]
+    fn claim_flood_is_capped() {
+        let mut tr = Tracker::new(1 << 30, Pins::default());
+        seed_devices(&mut tr, 100);
+        claim_flood(&mut tr, 70_000);
+        assert_eq!(tr.warn.state_sizes().0, 65536);
+        assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
+        assert_eq!(tr.table.len(), 100);
+    }
+
+    #[test]
+    fn answer_flood_is_capped() {
+        let mut tr = Tracker::new(1 << 30, Pins::default());
+        seed_devices(&mut tr, 100);
+        let mut out = Vec::new();
+        for i in 0..20_000u32 {
+            let o = Observation::NameAnswer {
+                mac: Mac([0x02, 0, 0, 0, 0, (i % 100) as u8]),
+                kind: AnswerKind::MdnsUnique,
+                name: format!("n{i}").into_bytes().into(),
+                data: vec![1].into(),
+            };
+            tr.warn
+                .observe(Segment::UNTAGGED, ts(0), &o, &mut tr.budget, &mut out);
+        }
+        assert_eq!(tr.warn.state_sizes().1, 16384);
+        assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
+        assert_eq!(tr.table.len(), 100);
+    }
+
+    #[test]
+    fn host_flood_is_capped() {
+        let mut tr = Tracker::new(1 << 30, Pins::default());
+        seed_devices(&mut tr, 100);
+        let mut out = Vec::new();
+        for i in 0..5000u32 {
+            let b = i.to_be_bytes();
+            let o = Observation::NameAnswer {
+                mac: Mac([0x06, 0, b[0], b[1], b[2], b[3]]),
+                kind: AnswerKind::Llmnr,
+                name: b"wpad".to_vec().into(),
+                data: vec![1].into(),
+            };
+            tr.warn
+                .observe(Segment::UNTAGGED, ts(0), &o, &mut tr.budget, &mut out);
+        }
+        assert_eq!(tr.warn.state_sizes().2, 4096);
+        assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
+        assert_eq!(tr.table.len(), 100);
+    }
+
+    #[test]
+    fn floods_stay_within_a_small_budget_and_keep_devices() {
+        let mut tr = Tracker::new(4 << 20, Pins::default());
+        seed_devices(&mut tr, 100);
+        claim_flood(&mut tr, 70_000);
+        let mut out = Vec::new();
+        for i in 0..20_000u32 {
+            let b = i.to_be_bytes();
+            let o = Observation::NameAnswer {
+                mac: Mac([0x02, 0, 0, 0, 0, (i % 100) as u8]),
+                kind: AnswerKind::Llmnr,
+                name: format!("name{i}").into_bytes().into(),
+                data: b.to_vec().into(),
+            };
+            tr.apply(Segment::UNTAGGED, ts(0), &[o], &mut out);
+        }
+        assert!(tr.budget.used() <= 4 << 20, "{}", tr.budget.used());
+        assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
+        assert_eq!(tr.table.len(), 100);
+        assert_eq!(tr.table.evictions(), 0);
+    }
+
+    #[test]
+    fn evicting_a_device_forgets_its_warn_state() {
+        let mut tr = Tracker::new(64 * 1024, Pins::default());
+        let mut out = Vec::new();
+        let m = Mac([0x02, 0, 0, 0, 0, 1]);
+        let claim = Observation::Claim {
+            mac: m,
+            ip: Ipv4Addr::new(10, 0, 0, 1).into(),
+        };
+        tr.apply(Segment::UNTAGGED, ts(0), &[claim], &mut out);
+        assert_eq!(tr.warn.state_sizes().0, 1);
+        flooded(&mut tr, 5000, 5);
+        assert!(tr.table.get(&m).is_none());
+        assert_eq!(tr.warn.state_sizes().0, 0);
+        assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
     }
 
     #[test]
@@ -120,7 +316,12 @@ mod tests {
         assert!(tr.table.evictions() > 0);
         assert!(tr.budget.used() <= 64 * 1024);
         assert!(tr.table.get(&server).is_some(), "pinned server evicted");
-        assert_eq!(out, []);
+        // Only the eviction notices; nothing about the pinned server.
+        assert!(
+            out.iter()
+                .all(|o| matches!(o, Output::Warning(w) if w.rule == Rule::MemoryEviction)),
+            "{out:?}"
+        );
     }
 
     #[test]

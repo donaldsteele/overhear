@@ -128,7 +128,7 @@ fn json_and_tui_conflict() {
 
 #[test]
 fn bad_memory_size() {
-    let out = run(&["--max-memory", "10K", "-r", pcap_arg(&data("generic.pcap"))]);
+    let out = run(&["--max-memory", "3M", "-r", pcap_arg(&data("generic.pcap"))]);
     assert_eq!(out.status.code(), Some(1));
 }
 

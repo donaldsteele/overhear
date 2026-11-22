@@ -91,7 +91,7 @@ impl Args {
 }
 
 /// A decimal number with an optional K, M or G suffix (powers of 1024, any
-/// case), at least one MiB.
+/// case), at least 4 MiB.
 pub fn parse_size(s: &str) -> Result<usize, String> {
     let t = s.trim();
     let (digits, mult): (&str, usize) = match t.char_indices().last() {
@@ -106,8 +106,8 @@ pub fn parse_size(s: &str) -> Result<usize, String> {
     let bytes = n
         .checked_mul(mult)
         .ok_or_else(|| format!("'{s}' is too large"))?;
-    if bytes < 1 << 20 {
-        return Err("must be at least 1M".into());
+    if bytes < 4 << 20 {
+        return Err("must be at least 4M".into());
     }
     Ok(bytes)
 }
@@ -150,8 +150,11 @@ mod tests {
     fn sizes() {
         assert_eq!(parse_size("64M"), Ok(64 << 20));
         assert_eq!(parse_size("1g"), Ok(1 << 30));
-        assert_eq!(parse_size("1024k"), Ok(1 << 20));
-        assert_eq!(parse_size("10K"), Err("must be at least 1M".into()));
+        assert_eq!(parse_size("4096k"), Ok(4 << 20));
+        assert_eq!(parse_size("4M"), Ok(4 << 20));
+        assert_eq!(parse_size("3M"), Err("must be at least 4M".into()));
+        assert_eq!(parse_size("1M"), Err("must be at least 4M".into()));
+        assert_eq!(parse_size("10K"), Err("must be at least 4M".into()));
         assert!(parse_size("abc").is_err());
         assert!(parse_size("").is_err());
     }

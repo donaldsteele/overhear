@@ -360,7 +360,7 @@ mod tests {
                 },
             ];
             tr.apply(U, ts(i64::from(i)), &obs, &mut Vec::new());
-            assert_eq!(tr.budget.used(), tr.table.recount());
+            assert_eq!(tr.budget.used(), tr.table.recount() + tr.warn.cost());
         }
         assert!(tr.budget.used() <= 64 * 1024);
         assert!(tr.table.len() < 10_000);

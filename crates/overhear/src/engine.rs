@@ -9,7 +9,7 @@ use crate::proto::observe;
 use crate::render::{Renderer, Status, Summary, TextOpts};
 use crate::source::{Frame, SourceError, SourceStats};
 use crate::track::Tracker;
-use crate::warn::{Output, Pins};
+use crate::warn::{Output, Pins, Rule};
 
 /// Empties `v` and hands back its allocation under another lifetime.
 fn reuse<'a, 'b>(mut v: Vec<Observation<'a>>) -> Vec<Observation<'b>> {
@@ -115,7 +115,20 @@ impl Engine {
             kernel_drops,
             channel_drops,
             evictions: self.tracker.table.evictions(),
-        })
+        })?;
+        let message = format!(
+            "{} frames dropped ({kernel_drops} by the kernel, {channel_drops} by overhear)",
+            kernel_drops.saturating_add(channel_drops)
+        );
+        let tracker = &mut self.tracker;
+        tracker.warn.operational(
+            Ts { sec: now, usec: 0 },
+            Rule::CaptureDrops,
+            message,
+            &mut tracker.budget,
+            &mut self.outputs,
+        );
+        self.render_outputs(r)
     }
 
     /// Called about once a second with the current time (seconds since the
@@ -198,7 +211,7 @@ mod tests {
                 style: TimeStyle::DateTime,
                 hex: false,
             },
-            max_memory: 1 << 20,
+            max_memory: 4 << 20,
             pins: Pins::default(),
         })
     }
@@ -337,5 +350,25 @@ mod tests {
         assert_eq!(r.0, want);
         let s = e.summary();
         assert_eq!((s.kernel_drops, s.channel_drops), (3, 5));
+    }
+
+    #[test]
+    fn drops_raise_one_operational_warning_a_minute() {
+        let mut e = engine();
+        let mut r = Events::default();
+        e.stats(st(0, 0), 0, 100, &mut r).expect("stats");
+        assert!(r.seen.is_empty());
+        e.stats(st(2, 1), 4, 101, &mut r).expect("stats");
+        assert_eq!(
+            r.seen,
+            ["7 frames dropped (3 by the kernel, 4 by overhear) x1"]
+        );
+        e.stats(st(9, 1), 4, 102, &mut r).expect("stats");
+        assert_eq!(r.seen.len(), 1, "repeat-limited");
+        assert_eq!(
+            e.tracker().budget.used(),
+            e.tracker().table.recount() + e.tracker().warn.cost()
+        );
+        assert!(e.outputs.is_empty());
     }
 }
