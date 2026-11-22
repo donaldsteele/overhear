@@ -1,0 +1,83 @@
+2026-11-21 13:02:11.000  70 bytes
+  ETH   02:00:5e:10:00:09 → 33:33:00:00:00:02  type 0x86dd
+  IPv6  fe80::9 → ff02::2  hop limit 255 next 58
+  ICMP6 type 133 code 0
+  ND    router solicitation
+        source-lla 02:00:5e:10:00:09
+
+2026-11-21 13:02:11.250  134 bytes
+  ETH   02:00:5e:10:00:01 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::1 → ff02::1  hop limit 255 next 58
+  ICMP6 type 134 code 0
+  ND    router advert hop-limit 64 flags - lifetime 1800s reachable 0ms retrans 0ms
+        source-lla 02:00:5e:10:00:01
+        prefix 2001:db8:1::/64 flags L A valid 2592000s preferred 604800s
+        rdnss lifetime 600s 2001:db8::53
+
+2026-11-21 13:02:11.250 NOTE  expected router fe80::1 (02:00:5e:10:00:01) (learned)
+2026-11-21 13:02:11.500  126 bytes
+  ETH   02:00:5e:10:00:02 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::2 → ff02::1  hop limit 255 next 58
+  ICMP6 type 134 code 0
+  ND    router advert hop-limit 64 flags - lifetime 0s reachable 0ms retrans 0ms
+        prefix fd00:1::/64 flags L A valid 2592000s preferred 604800s
+        route fd00:2::/48 pref medium lifetime 1800s
+
+2026-11-21 13:02:11.750  94 bytes
+  ETH   02:00:5e:10:00:02 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::2 → ff02::1  hop limit 255 next 58
+  ICMP6 type 134 code 0
+  ND    router advert hop-limit 64 flags - lifetime 0s reachable 0ms retrans 0ms
+        rdnss lifetime 600s 2001:db8::53
+
+2026-11-21 13:02:11.750 WARN  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
+2026-11-21 13:02:12.000  70 bytes
+  ETH   02:00:5e:10:00:03 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::3 → ff02::1  hop limit 255 next 58
+  ICMP6 type 134 code 0
+  ND    router advert hop-limit 64 flags - lifetime 600s reachable 0ms retrans 0ms
+
+2026-11-21 13:02:12.000 WARN  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
+2026-11-21 13:02:12.250  78 bytes
+  ETH   02:00:5e:10:00:06 → 33:33:ff:00:00:60  type 0x86dd
+  IPv6  :: → ff02::1:ff00:60  hop limit 255 next 58
+  ICMP6 type 135 code 0
+  ND    neighbour solicitation target 2001:db8:1::60
+
+2026-11-21 13:02:12.500  86 bytes
+  ETH   02:00:5e:10:00:06 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::6 → ff02::1  hop limit 255 next 58
+  ICMP6 type 136 code 0
+  ND    neighbour advert target 2001:db8:1::60 flags O
+        target-lla 02:00:5e:10:00:06
+
+2026-11-21 13:02:12.750  86 bytes
+  ETH   02:00:5e:10:00:04 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::4 → ff02::1  hop limit 255 next 58
+  ICMP6 type 136 code 0
+  ND    neighbour advert target 2001:db8:1::50 flags S O
+        target-lla 02:00:5e:10:00:04
+
+2026-11-21 13:02:42.750  86 bytes
+  ETH   02:00:5e:10:00:05 → 33:33:00:00:00:01  type 0x86dd
+  IPv6  fe80::5 → ff02::1  hop limit 255 next 58
+  ICMP6 type 136 code 0
+  ND    neighbour advert target 2001:db8:1::50 flags S O
+        target-lla 02:00:5e:10:00:05
+
+2026-11-21 13:02:42.750 WARN  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago
+2026-11-21 13:02:43.000  86 bytes
+  ETH   02:00:5e:10:00:07 → 33:33:ff:00:00:50  type 0x86dd
+  IPv6  fe80::7 → 2001:db8:1::50  hop limit 64 next 58
+  ICMP6 type 135 code 0
+  ND    neighbour solicitation target 2001:db8:1::50
+        source-lla 02:00:5e:10:00:07
+  !     nd: hop limit not 255 (invalid neighbour discovery) at 58: 
+
+2026-11-21 13:02:43.250  70 bytes
+  ETH   02:00:5e:10:00:08 → 33:33:00:00:00:02  type 0x86dd
+  IPv6  fe80::8 → ff02::2  hop limit 255 next 58
+  ICMP6 type 133 code 0
+  ND    router solicitation
+  !     nd: zero-length option at 62: 0700
+

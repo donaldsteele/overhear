@@ -1,5 +1,5 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
-use crate::{Arp, Cursor, Dhcp, EthHeader, EthKind, Layer, Problem, arp, dhcp, ethernet};
+use crate::{Arp, Cursor, Dhcp, EthHeader, EthKind, Layer, Nd, Problem, arp, dhcp, ethernet, nd};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdpHeader {
@@ -19,6 +19,7 @@ pub enum L4 {
 pub enum Proto<'a> {
     Arp(Arp),
     Dhcp(Dhcp<'a>),
+    Nd(Nd<'a>),
     Other { payload: &'a [u8] },
 }
 
@@ -60,13 +61,16 @@ fn dispatch_udp<'a>(
 }
 
 fn dispatch_icmpv6<'a>(
-    _ip: &Ipv6Header,
-    _typ: u8,
+    ip: &Ipv6Header,
+    typ: u8,
     _code: u8,
-    _c: &mut Cursor<'a>,
-    _problems: &mut Vec<Problem>,
+    c: &mut Cursor<'a>,
+    problems: &mut Vec<Problem>,
 ) -> Option<Proto<'a>> {
-    None
+    match typ {
+        133..=137 => nd::parse(c, typ, ip.hop_limit, problems).map(Proto::Nd),
+        _ => None,
+    }
 }
 
 /// Decodes a frame. `Err` only when the Ethernet header is incomplete.

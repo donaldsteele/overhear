@@ -119,3 +119,8 @@ fn arp() {
 fn dhcp() {
     golden("dhcp");
 }
+
+#[test]
+fn nd() {
+    golden("nd");
+}

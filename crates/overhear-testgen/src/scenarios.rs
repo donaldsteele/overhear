@@ -245,11 +245,103 @@ fn dhcp_scenario() -> Vec<TFrame> {
     stamp(f)
 }
 
+fn nd_scenario() -> Vec<TFrame> {
+    let ll = |n: u16| Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, n);
+    let a6 = |s: &str| s.parse::<Ipv6Addr>().expect("literal address");
+    let all_routers = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 2);
+    let routers_mac = [0x33, 0x33, 0, 0, 0, 2];
+    let to_all = |src: u8, src_ip: Ipv6Addr, icmp: &[u8]| {
+        let ip = ipv6_icmp(src_ip, all_nodes(), 255, icmp);
+        (eth_ipv6(ALL_NODES_MAC, mac(src), &ip), None)
+    };
+    let global = a6("2001:db8:1::");
+    let target = a6("2001:db8:1::50");
+    let mut f = Vec::new();
+    let rs = ipv6_icmp(ll(9), all_routers, 255, &nd_rs(&[opt_lla(1, mac(9))]));
+    f.push((eth_ipv6(routers_mac, mac(9), &rs), None));
+    // The router, then the border router (no default route, then DNS only).
+    f.push(to_all(
+        1,
+        ll(1),
+        &nd_ra(
+            1800,
+            0,
+            &[
+                opt_lla(1, mac(1)),
+                opt_prefix(global, 64, 0xc0),
+                opt_rdnss(&[a6("2001:db8::53")]),
+            ],
+        ),
+    ));
+    f.push(to_all(
+        2,
+        ll(2),
+        &nd_ra(
+            0,
+            0,
+            &[
+                opt_prefix(a6("fd00:1::"), 64, 0xc0),
+                opt_route(a6("fd00:2::"), 48),
+            ],
+        ),
+    ));
+    f.push(to_all(
+        2,
+        ll(2),
+        &nd_ra(0, 0, &[opt_rdnss(&[a6("2001:db8::53")])]),
+    ));
+    // A third router offers a default route.
+    f.push(to_all(3, ll(3), &nd_ra(600, 0, &[])));
+    // Duplicate address detection, then an unsolicited advert.
+    let dad = ipv6_icmp(
+        Ipv6Addr::UNSPECIFIED,
+        a6("ff02::1:ff00:60"),
+        255,
+        &nd_ns(a6("2001:db8:1::60"), &[]),
+    );
+    f.push((eth_ipv6([0x33, 0x33, 0xff, 0, 0, 0x60], mac(6), &dad), None));
+    f.push(to_all(
+        6,
+        ll(6),
+        &nd_na(0x20, a6("2001:db8:1::60"), &[opt_lla(2, mac(6))]),
+    ));
+    // 2001:db8:1::50 is claimed by mac(4), then by mac(5) 30 s later.
+    f.push(to_all(
+        4,
+        ll(4),
+        &nd_na(0x60, target, &[opt_lla(2, mac(4))]),
+    ));
+    f.push(to_all(
+        5,
+        ll(5),
+        &nd_na(0x60, target, &[opt_lla(2, mac(5))]),
+    ));
+    // A solicitation that did not keep its hop limit of 255.
+    let bad = ipv6_icmp(ll(7), target, 64, &nd_ns(target, &[opt_lla(1, mac(7))]));
+    f.push((eth_ipv6([0x33, 0x33, 0xff, 0, 0, 0x50], mac(7), &bad), None));
+    // A zero-length option.
+    let mut zero = nd_rs(&[]);
+    zero.extend_from_slice(&[7, 0, 0, 0, 0, 0, 0, 0]);
+    let ip = ipv6_icmp(ll(8), all_routers, 255, &zero);
+    f.push((eth_ipv6(routers_mac, mac(8), &ip), None));
+    let mut frames = stamp(f);
+    // Exactly 30 s between the two adverts, then the rest follow.
+    let gap = frames[8].sec * 1_000_000 + i64::from(frames[8].usec)
+        - (frames[7].sec * 1_000_000 + i64::from(frames[7].usec));
+    for t in frames.iter_mut().skip(8) {
+        let at = t.sec * 1_000_000 + i64::from(t.usec) + 30_000_000 - gap;
+        t.sec = at.div_euclid(1_000_000);
+        t.usec = at.rem_euclid(1_000_000) as u32;
+    }
+    frames
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
     vec![
         ("generic", generic()),
         ("arp", arp_scenario()),
         ("dhcp", dhcp_scenario()),
+        ("nd", nd_scenario()),
     ]
 }

@@ -1,0 +1,15 @@
+2026-11-21 13:02:11.000 ND    fe80::9            router solicitation
+2026-11-21 13:02:11.250 ND    fe80::1            router advert lifetime 1800s prefix 2001:db8:1::/64 dns 2001:db8::53
+2026-11-21 13:02:11.250 NOTE  expected router fe80::1 (02:00:5e:10:00:01) (learned)
+2026-11-21 13:02:11.500 ND    fe80::2            router advert lifetime 0 (not a default router) prefix fd00:1::/64
+2026-11-21 13:02:11.750 ND    fe80::2            router advert lifetime 0 (not a default router) dns 2001:db8::53
+2026-11-21 13:02:11.750 WARN  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
+2026-11-21 13:02:12.000 ND    fe80::3            router advert lifetime 600s
+2026-11-21 13:02:12.000 WARN  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
+2026-11-21 13:02:12.250 ND    02:00:5e:10:00:06  duplicate address check for 2001:db8:1::60
+2026-11-21 13:02:12.500 ND    fe80::6            2001:db8:1::60 is-at 02:00:5e:10:00:06 (unsolicited)
+2026-11-21 13:02:12.750 ND    fe80::4            2001:db8:1::50 is-at 02:00:5e:10:00:04
+2026-11-21 13:02:42.750 ND    fe80::5            2001:db8:1::50 is-at 02:00:5e:10:00:05
+2026-11-21 13:02:42.750 WARN  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago
+2026-11-21 13:02:43.000 ND    fe80::7            neighbour solicitation for 2001:db8:1::50 [malformed: nd hop limit not 255 (invalid neighbour discovery)]
+2026-11-21 13:02:43.250 ND    fe80::8            router solicitation [malformed: nd zero-length option]
