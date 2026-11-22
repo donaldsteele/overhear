@@ -109,13 +109,14 @@ impl Names {
             .filter(|(m, h, t)| *m != mac && *h != hash && age(ts.sec, *t) <= WINDOW)
             .map(|(old, _, _)| {
                 let shown = escaped(&original);
+                let subject = escaped(&key.2);
                 Output::Warning(Warning {
                     ts,
                     rule: Rule::SuspiciousNameAnswers,
                     severity: Severity::Low,
                     segment: Some(seg),
                     message: format!("name {shown} answered by {mac} and {old}"),
-                    subject: shown,
+                    subject,
                     macs: vec![mac, old],
                     addrs: vec![],
                     count: 1,

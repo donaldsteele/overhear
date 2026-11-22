@@ -1176,7 +1176,33 @@ mod tests {
             w.message,
             "name FILESERVER<20> answered by 02:00:5e:10:00:02 and 02:00:5e:10:00:01"
         );
-        assert_eq!(w.subject, "FILESERVER<20>");
+        assert_eq!(w.subject, "fileserver<20>");
+    }
+
+    #[test]
+    fn alternating_casing_does_not_defeat_the_repeat_limit() {
+        let mut r = Rig::new(Pins::default());
+        let k = AnswerKind::Netbios;
+        let names: [&[u8]; 6] = [
+            b"FileServer<20>",
+            b"FILESERVER<20>",
+            b"fileServer<20>",
+            b"FiLeSeRvEr<20>",
+            b"fileserver<20>",
+            b"FILEserver<20>",
+        ];
+        let mut all = Vec::new();
+        for (i, n) in names.iter().enumerate() {
+            let who = 1 + (i % 2) as u8;
+            all.extend(r.see(U, i as i64, &answer(who, k, n, &[who])));
+        }
+        let ws = warnings(&all);
+        assert_eq!(ws.len(), 1, "{ws:?}");
+        assert_eq!(ws[0].subject, "fileserver<20>");
+        assert_eq!(
+            ws[0].message,
+            "name FILESERVER<20> answered by 02:00:5e:10:00:02 and 02:00:5e:10:00:01"
+        );
     }
 
     #[test]
