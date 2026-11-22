@@ -296,7 +296,8 @@ fn rdata<'a>(
     // A name that fills `data` from `skip` on.
     let name_at = |skip: usize, problems: &mut Vec<Problem>| -> Result<Name<'a>, &'static str> {
         let rel = off.saturating_add(skip);
-        let wire = wire_len(msg, rel)?;
+        let bounded = msg.get(..off.saturating_add(data.len())).unwrap_or(msg);
+        let wire = wire_len(bounded, rel)?;
         if wire != data.len().saturating_sub(skip) {
             return Err("bad rdata length");
         }
@@ -342,13 +343,13 @@ fn rdata<'a>(
     }
 }
 
-/// Parses a DNS message from the cursor's position. The message region starts
-/// at `c.start()`, which is where compression pointers count from. Counts
+/// Parses a DNS message from the cursor's position. Compression pointers count
+/// from the position at entry, the DNS header, whatever region the cursor has. Counts
 /// that run past the data, or a name whose length cannot be found, stop the
 /// parse; the questions and records read so far are kept.
 pub fn parse<'a>(c: &mut Cursor<'a>, problems: &mut Vec<Problem>) -> Option<DnsMessage<'a>> {
-    let start = c.start();
     let begin = c.pos();
+    let start = begin;
     let mut r = *c;
     let end = begin.saturating_add(r.remaining());
     let msg = r.frame().get(start..end)?;
@@ -766,6 +767,30 @@ mod tests {
         let v: Vec<&[u8]> = txt_strings(&[5, b'a']).collect();
         assert_eq!(v, vec![&b"a"[..]]);
         assert_eq!(txt_strings(&[]).count(), 0);
+    }
+
+    #[test]
+    fn pointers_count_from_the_dns_header_not_the_region_start() {
+        let msg = DnsBuilder::new(0x8400)
+            .answer(
+                "_x._tcp.local",
+                12,
+                1,
+                120,
+                RDataSpec::Ptr("i._x._tcp.local".into()),
+            )
+            .bytes();
+        let mut frame = vec![0xee; 7];
+        frame.extend_from_slice(&msg);
+        let mut c = Cursor::new(&frame);
+        c.skip(7).unwrap();
+        let mut p = Vec::new();
+        let m = parse(&mut c, &mut p).unwrap();
+        assert!(p.is_empty(), "{p:?}");
+        let RData::Ptr(t) = m.records[0].rdata else {
+            panic!("not ptr")
+        };
+        assert_eq!(dotted(&t), "i._x._tcp.local");
     }
 
     #[test]

@@ -176,7 +176,8 @@ fn udp<'a>(
             offset: start.saturating_add(4),
             len: 2,
         });
-    } else if let Some(sub) = c.sub(plen) {
+    }
+    if let Some(sub) = c.sub(plen.min(c.remaining())) {
         *c = sub;
     }
     dispatch_udp(ip, &hdr, c, problems).unwrap_or_else(|| other(c))
@@ -458,5 +459,60 @@ mod tests {
         let p = decode(&f).unwrap();
         assert_eq!(prob(&p), vec![(Layer::Dns, "truncated")]);
         assert!(matches!(p.proto, Proto::Other { payload } if payload.len() == 5));
+    }
+
+    #[test]
+    fn snaplen_cut_mdns_never_marks_garbage_valid() {
+        let inst = "Living-Room-TV._googlecast._tcp.local";
+        let b = DnsBuilder::new(0x8400)
+            .answer(
+                "_googlecast._tcp.local",
+                12,
+                1,
+                4500,
+                RDataSpec::Ptr(inst.into()),
+            )
+            .answer(
+                inst,
+                33,
+                0x8001,
+                4500,
+                RDataSpec::Srv(8009, "Living-Room-TV.local".into()),
+            )
+            .answer(
+                "Living-Room-TV.local",
+                1,
+                0x8001,
+                120,
+                RDataSpec::A(v4(10, 0, 0, 1)),
+            )
+            .bytes();
+        let ip = ipv4_udp(v4(10, 0, 0, 5), v4(224, 0, 0, 251), 5353, 5353, &b);
+        let full = eth_ipv4(mac(1), mac(2), &ip);
+        let mut parsed_ptr = false;
+        for cut in 1..120 {
+            let f = &full[..full.len() - cut];
+            let p = decode(f).unwrap();
+            let Proto::Mdns(m) = &p.proto else { continue };
+            for n in m
+                .questions
+                .iter()
+                .map(|q| q.name)
+                .chain(m.records.iter().map(|r| r.name))
+            {
+                if n.is_valid() {
+                    let d = n.dotted();
+                    assert!(d.iter().all(|b| b.is_ascii_graphic()), "cut {cut}: {d:?}");
+                }
+            }
+            for r in &m.records {
+                if let crate::RData::Ptr(t) = r.rdata {
+                    assert!(t.is_valid());
+                    assert_eq!(t.dotted(), inst.as_bytes(), "cut {cut}");
+                    parsed_ptr = true;
+                }
+            }
+        }
+        assert!(parsed_ptr);
     }
 }

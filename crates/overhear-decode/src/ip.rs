@@ -138,7 +138,8 @@ pub(crate) fn ipv4(c: &mut Cursor<'_>, problems: &mut Vec<Problem>) -> Option<(I
             start.saturating_add(2),
             2,
         ));
-    } else if let Some(sub) = c.sub(payload_len) {
+    }
+    if let Some(sub) = c.sub(payload_len.min(c.remaining())) {
         *c = sub;
     }
     Some((header, frag != Frag::Later))
@@ -176,7 +177,8 @@ pub(crate) fn ipv6(c: &mut Cursor<'_>, problems: &mut Vec<Problem>) -> Option<(I
             start.saturating_add(4),
             2,
         ));
-    } else if let Some(sub) = c.sub(plen) {
+    }
+    if let Some(sub) = c.sub(plen.min(c.remaining())) {
         *c = sub;
     }
     let mut count = 0usize;

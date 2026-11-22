@@ -668,21 +668,28 @@ mod tests {
 
     #[test]
     fn bad_names_teach_nothing() {
-        // A name made of a forward pointer.
+        // The second name is "b" plus a pointer to "local"; make that forward.
         let mut b = frame(
             5,
-            &with_answers(RESPONSE, vec![a("x.local", 5, 0x8001, 120)]),
+            &with_answers(
+                RESPONSE,
+                vec![a("a.local", 5, 0x8001, 120), a("b.local", 6, 0x8001, 120)],
+            ),
         );
-        let at = 14 + 20 + 8 + 12;
+        let at = 14 + 20 + 8 + 12 + 9 + 14 + 2;
         b[at] = 0xc0;
         b[at + 1] = 0xf0;
         let p = decode(&b).unwrap();
         let Proto::Mdns(m) = &p.proto else {
             panic!("not mdns")
         };
+        assert_eq!(m.records.len(), 2);
+        assert!(m.records[0].name.is_valid() && !m.records[1].name.is_valid());
+        assert_eq!(m.records[1].rdata, overhear_decode::RData::A(v4(6)));
         let mut out = Vec::new();
         observe(&p, m, &mut out);
-        assert_eq!(out.len(), 1);
+        // Heard, then Name, Address and NameAnswer for "a.local" only.
+        assert_eq!(out.len(), 4);
     }
 
     #[test]
