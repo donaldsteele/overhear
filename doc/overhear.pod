@@ -129,18 +129,17 @@ Without filter words overhear asks the kernel for just what it can decode:
 
 (that is: broadcast and multicast frames, ARP, DHCP, NetBIOS name service, SSDP,
 mDNS, LLMNR, and the five IPv6 neighbour discovery message types). The same
-expression is also applied to frames carrying one VLAN tag, because the
-pcap B<vlan> keyword shifts everything after it.
+expression is also applied to frames carrying one VLAN tag and to frames
+carrying two (QinQ), because the pcap B<vlan> keyword shifts everything after it.
 
-Filter words you give are joined to that with B<and>, for both the untagged and the
-tagged arm. This narrows what is shown; it can never widen it. For example
-C<overhear -i eth0 host 192.168.1.1> shows only traffic to or from that host
-that the built-in filter also accepts.
+Filter words you give are joined to that with B<and>, for the untagged, the
+tagged and the QinQ arm alike. This narrows what is shown; it can never widen it.
+For example C<overhear -i eth0 host 192.168.1.1> shows only traffic to or from
+that host that the built-in filter also accepts.
 
-Limit: a user filter makes the VLAN arm a single C<vlan> arm. Frames with
-B<two> or more tags (QinQ) are therefore not matched by a user filter when they
-are unicast; QinQ broadcast and multicast frames still are. Without a user filter
-this does not apply.
+Limit: the filter looks through at most two VLAN tags. Unicast frames with
+B<three> or more tags may therefore be missed, and with filter words so may
+broadcast and multicast frames with three or more tags.
 
 =head1 OUTPUT
 

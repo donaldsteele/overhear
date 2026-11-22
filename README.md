@@ -98,8 +98,9 @@ Two things to know about filters:
 * Host and port names written in a filter are resolved by libpcap through the system
   resolver, which can send DNS queries. overhear itself never sends. For strict
   silence use numeric addresses and ports.
-* With a filter, QinQ frames (two or more VLAN tags) are matched only if they
-  are broadcast or multicast; unicast QinQ frames are not matched.
+* The filter looks through at most two VLAN tags (QinQ). Unicast frames with
+  three or more tags may be missed, and with filter words so may broadcast and
+  multicast frames with three or more tags.
 
 `man overhear` has the full description of every option, the warning rules,
 and every JSON field.

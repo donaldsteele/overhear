@@ -5,7 +5,7 @@ use std::process::{Command, Output, Stdio};
 
 use overhear_testgen::scenarios::scenarios;
 use overhear_testgen::{
-    BCAST, TFrame, eth, eth_ipv4, mac, pcap_bytes, write_pcap, write_pcap_linktype,
+    BCAST, TFrame, arp, eth, eth_ipv4, eth_vlan, mac, pcap_bytes, write_pcap, write_pcap_linktype,
     write_pcapng_tsoffset,
 };
 
@@ -72,17 +72,17 @@ fn file_output_matches_golden() {
 #[test]
 fn filter_expression_narrows() {
     let golden = fs::read_to_string(data("generic.line")).expect("golden");
-    // libpcap's `vlan` sees only the outer 802.1Q tag, so the double-tagged
-    // frame ("[200.100]") does not match.
+    // Every UDP line, untagged, tagged and double-tagged ("[200.100]").
     let want = golden
         .lines()
-        .filter(|l| l[24..].starts_with("UDP") && !l.contains("[200.100]"))
+        .filter(|l| l[24..].starts_with("UDP"))
         .count();
     let out = run(&["-r", pcap_arg(&data("generic.pcap")), "udp"]);
     assert_eq!(out.status.code(), Some(0));
     let text = s(&out.stdout);
     let got = text.lines().filter(|l| l[24..].starts_with("UDP")).count();
     assert_eq!(got, want, "output: {text}");
+    assert!(text.contains("[200.100]"), "output: {text}");
     assert!(
         text.lines()
             .all(|l| l[24..].starts_with("UDP") || l[24..].starts_with("IPv4")),
@@ -108,6 +108,41 @@ fn unicast_tcp_is_filtered_by_default() {
     let out = run(&["-r", pcap_arg(&path)]);
     assert_eq!(out.stdout, b"");
     assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
+fn unicast_qinq_arp_passes_the_filter() {
+    let payload = arp(
+        2,
+        mac(1),
+        "192.168.1.1".parse().expect("ip"),
+        mac(2),
+        "192.168.1.2".parse().expect("ip"),
+    );
+    let f = TFrame {
+        sec: 1_795_266_131,
+        usec: 0,
+        data: eth_vlan(
+            mac(2),
+            mac(1),
+            &[(0x88a8, 200), (0x8100, 100)],
+            0x0806,
+            &payload,
+        ),
+        orig_len: None,
+    };
+    let path = tmp("unicast_qinq_arp.pcap");
+    write_pcap(&path, &[f]).expect("write");
+    // The built-in filter alone, and narrowed by filter words.
+    for extra in [&[][..], &["arp"][..]] {
+        let mut args = vec!["-r", pcap_arg(&path)];
+        args.extend_from_slice(extra);
+        let out = run(&args);
+        assert_eq!(out.status.code(), Some(0), "{extra:?}");
+        let text = s(&out.stdout);
+        assert_eq!(text.lines().count(), 1, "{extra:?}: {text}");
+        assert!(text.contains("[200.100]") && text.contains("ARP"), "{text}");
+    }
 }
 
 #[test]

@@ -345,7 +345,7 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 <div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>08 / Good to know</span></p><h2>The honest list.</h2></div>
 <ol class="good">
 <li><span>On a switch, a passive listener hears broadcasts and multicasts, not unicast traffic between other devices. DHCP ACKs to a client elsewhere and ARP replies go unseen, and a device that never broadcasts is not seen at all. Listen on a mirror port, a tap or a hub to see more.</span></li>
-<li><span>With filter words, tagged frames are matched through a single VLAN tag, so unicast frames with two or more tags (QinQ) are missed. QinQ broadcasts and multicasts still match, and without filter words nothing is missed.</span></li>
+<li><span>The capture filter looks through at most two VLAN tags (QinQ). Unicast frames with three or more tags may be missed, and with filter words so may broadcasts and multicasts with three or more tags.</span></li>
 <li><span>Linux only for now, on amd64 and arm64. Windows is planned.</span></li>
 <li><span>Reading a quiet pipe with <code>-r -</code>, the first Ctrl-C waits for more data or the end of the input. Press Ctrl-C again to stop at once.</span></li>
 <li><span>The memory cap is approximate. It covers the devices and warning state, not packet buffers or the program itself: with the default 64M, a flood of a million MAC addresses stays under 112 MiB resident.</span></li>

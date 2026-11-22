@@ -185,11 +185,11 @@ or udp port 68 or udp port 137 or udp port 1900
 or udp port 5353 or udp port 5355
 or (icmp6 and ip6[40] &gt;= 133 and ip6[40] &lt;= 137)</code></pre>
 
-<p>(that is: broadcast and multicast frames, ARP, DHCP, NetBIOS name service, SSDP, mDNS, LLMNR, and the five IPv6 neighbour discovery message types). The same expression is also applied to frames carrying one VLAN tag, because the pcap <b>vlan</b> keyword shifts everything after it.</p>
+<p>(that is: broadcast and multicast frames, ARP, DHCP, NetBIOS name service, SSDP, mDNS, LLMNR, and the five IPv6 neighbour discovery message types). The same expression is also applied to frames carrying one VLAN tag and to frames carrying two (QinQ), because the pcap <b>vlan</b> keyword shifts everything after it.</p>
 
-<p>Filter words you give are joined to that with <b>and</b>, for both the untagged and the tagged arm. This narrows what is shown; it can never widen it. For example <code>overhear -i eth0 host 192.168.1.1</code> shows only traffic to or from that host that the built-in filter also accepts.</p>
+<p>Filter words you give are joined to that with <b>and</b>, for the untagged, the tagged and the QinQ arm alike. This narrows what is shown; it can never widen it. For example <code>overhear -i eth0 host 192.168.1.1</code> shows only traffic to or from that host that the built-in filter also accepts.</p>
 
-<p>Limit: a user filter makes the VLAN arm a single <code>vlan</code> arm. Frames with <b>two</b> or more tags (QinQ) are therefore not matched by a user filter when they are unicast; QinQ broadcast and multicast frames still are. Without a user filter this does not apply.</p>
+<p>Limit: the filter looks through at most two VLAN tags. Unicast frames with <b>three</b> or more tags may therefore be missed, and with filter words so may broadcast and multicast frames with three or more tags.</p>
 
 <h1 id="OUTPUT">OUTPUT</h1>
 
