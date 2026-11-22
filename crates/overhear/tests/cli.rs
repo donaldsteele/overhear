@@ -2,8 +2,9 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::OnceLock;
 
-use overhear_testgen::scenarios::scenarios;
+use overhear_testgen::scenarios::{merged, scenarios};
 use overhear_testgen::{
     BCAST, TFrame, arp, eth, eth_ipv4, eth_vlan, mac, pcap_bytes, write_pcap, write_pcap_linktype,
     write_pcapng_tsoffset,
@@ -272,6 +273,190 @@ fn lists_interfaces() {
         s(&out.stdout).lines().any(|l| l.starts_with("lo\t")),
         "stdout: {}",
         s(&out.stdout)
+    );
+}
+
+/// The DHCP, mDNS and ARP scenarios in one capture, in time order. Written
+/// once: tests run in parallel, and one must not read it while another
+/// rewrites it.
+fn dhcp_mdns_arp() -> &'static Path {
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
+    PATH.get_or_init(|| {
+        let path = tmp("dhcp_mdns_arp.pcap");
+        write_pcap(&path, &merged(&["dhcp", "mdns", "arp"]).expect("merge")).expect("write");
+        path
+    })
+}
+
+/// The lines of the named golden line files in time order, as one capture
+/// would show them: same-time lines keep the order the files were named in.
+fn golden_merged(names: &[&str]) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for n in names {
+        let text = fs::read_to_string(data(&format!("{n}.line"))).expect("golden");
+        lines.extend(text.lines().map(str::to_owned));
+    }
+    lines.sort_by(|a, b| a[..23].cmp(&b[..23]));
+    lines.iter().map(|l| format!("{l}\n")).collect()
+}
+
+/// The protocol column of a line of line output.
+fn tag(line: &str) -> &str {
+    line[24..30].trim_end()
+}
+
+const KNOWN: &str = "(known: arp, dhcp, nd, mdns, llmnr, nbns, ssdp, lldp, cdp, stp)";
+
+#[test]
+fn proto_keeps_only_the_named_protocols() {
+    let path = dhcp_mdns_arp();
+    let out = run(&["-r", pcap_arg(path), "--proto", "dhcp,mdns"]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", s(&out.stderr));
+    let text = s(&out.stdout);
+    assert!(
+        text.lines()
+            .all(|l| ["DHCP", "mDNS", "WARN", "NOTE"].contains(&tag(l))),
+        "output: {text}"
+    );
+    // Exactly the DHCP and mDNS scenarios' own output, warnings included.
+    assert_eq!(text, golden_merged(&["dhcp", "mdns"]));
+}
+
+#[test]
+fn proto_names_may_be_repeated_and_mixed_case() {
+    let path = dhcp_mdns_arp();
+    let out = run(&[
+        "-r",
+        pcap_arg(path),
+        "--proto",
+        "MDNS",
+        "--proto",
+        "Dhcp,mdns",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", s(&out.stderr));
+    assert_eq!(s(&out.stdout), golden_merged(&["dhcp", "mdns"]));
+}
+
+#[test]
+fn proto_arp_keeps_only_arp() {
+    let path = dhcp_mdns_arp();
+    let golden = fs::read_to_string(data("arp.line")).expect("golden");
+    let out = run(&["-r", pcap_arg(path), "--proto", "arp"]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", s(&out.stderr));
+    let text = s(&out.stdout);
+    assert!(
+        text.lines().all(|l| tag(l) != "DHCP" && tag(l) != "mDNS"),
+        "output: {text}"
+    );
+    // The ARP scenario's own output, its truncated ARP frame and warning included.
+    assert_eq!(text, golden);
+}
+
+#[test]
+fn each_proto_keeps_its_whole_scenario() {
+    for (scenario, protos, others) in [
+        ("dhcp", "dhcp", "arp,nd,mdns,llmnr,nbns,ssdp,lldp,cdp,stp"),
+        ("mdns", "mdns", "llmnr,nbns,ssdp"),
+        ("arp", "arp", "dhcp,nd"),
+        ("nd", "ndp", "arp,mdns"),
+        ("llmnr_nbns", "llmnr,netbios", "mdns,dhcp"),
+        ("ssdp", "ssdp", "mdns,llmnr"),
+        ("lldp_cdp", "lldp,cdp", "stp"),
+        ("stp", "stp", "lldp,cdp"),
+    ] {
+        let pcap = data(&format!("{scenario}.pcap"));
+        let golden = fs::read_to_string(data(&format!("{scenario}.line"))).expect("golden");
+        let out = run(&["-r", pcap_arg(&pcap), "--proto", protos]);
+        assert_eq!(out.status.code(), Some(0), "{scenario}: {}", s(&out.stderr));
+        assert_eq!(s(&out.stdout), golden, "{scenario} --proto {protos}");
+        let out = run(&["-r", pcap_arg(&pcap), "--proto", others]);
+        assert_eq!(out.status.code(), Some(0), "{scenario}: {}", s(&out.stderr));
+        assert_eq!(s(&out.stdout), "", "{scenario} --proto {others}");
+    }
+}
+
+#[test]
+fn proto_works_in_json_mode() {
+    let path = dhcp_mdns_arp();
+    let out = run(&["-j", "-r", pcap_arg(path), "--proto", "arp"]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", s(&out.stderr));
+    let golden = fs::read_to_string(data("arp.jsonl")).expect("golden");
+    assert_eq!(s(&out.stdout), golden);
+}
+
+#[test]
+fn unknown_proto_exits_1_with_the_known_names() {
+    let pcap = data("generic.pcap");
+    for (value, msg) in [
+        (
+            "bogus",
+            format!("overhear: unknown protocol \"bogus\" {KNOWN}\n"),
+        ),
+        (
+            "dhcp,xyz",
+            format!("overhear: unknown protocol \"xyz\" {KNOWN}\n"),
+        ),
+        ("", format!("overhear: empty protocol name {KNOWN}\n")),
+        ("dhcp,", format!("overhear: empty protocol name {KNOWN}\n")),
+    ] {
+        let out = run(&["-r", pcap_arg(&pcap), "--proto", value]);
+        assert_eq!(out.status.code(), Some(1), "{value:?}");
+        assert_eq!(s(&out.stderr), msg, "{value:?}");
+        assert!(out.stdout.is_empty(), "{value:?}");
+    }
+}
+
+#[test]
+fn proto_and_filter_words_both_narrow() {
+    let path = dhcp_mdns_arp();
+    // The words alone also let through ARP for that host.
+    let words = run(&["-r", pcap_arg(path), "host", "192.168.1.1"]);
+    assert_eq!(words.status.code(), Some(0), "stderr: {}", s(&words.stderr));
+    assert!(
+        s(&words.stdout).lines().any(|l| tag(l) == "ARP"),
+        "{}",
+        s(&words.stdout)
+    );
+
+    let out = run(&[
+        "-r",
+        pcap_arg(path),
+        "--proto",
+        "dhcp",
+        "host",
+        "192.168.1.1",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", s(&out.stderr));
+    // The DHCP frames from 192.168.1.1 (its replies go to the broadcast
+    // address), and the baseline they set.
+    let golden = fs::read_to_string(data("dhcp.line")).expect("golden");
+    let want: String = golden
+        .lines()
+        .filter(|l| {
+            let f: Vec<&str> = l.split_whitespace().collect();
+            (f[2] == "DHCP" && f[3] == "192.168.1.1")
+                || l.ends_with("NOTE  expected DHCP server 192.168.1.1 (learned)")
+        })
+        .map(|l| format!("{l}\n"))
+        .collect();
+    assert_eq!(want.lines().count(), 8, "{want}");
+    assert_eq!(s(&out.stdout), want);
+}
+
+#[test]
+fn proto_is_in_the_help() {
+    let out = run(&["--help"]);
+    assert_eq!(out.status.code(), Some(0));
+    let help = s(&out.stdout);
+    let line = help
+        .lines()
+        .find(|l| l.trim_start().starts_with("--proto <NAMES>"))
+        .unwrap_or_else(|| panic!("no --proto in: {help}"));
+    assert!(
+        line.ends_with(
+            "  Only these protocols (comma-separated): arp, dhcp, nd, mdns, llmnr, nbns, ssdp, lldp, cdp, stp"
+        ),
+        "{line}"
     );
 }
 

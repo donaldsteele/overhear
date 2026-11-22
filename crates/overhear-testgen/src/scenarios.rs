@@ -731,3 +731,58 @@ pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
         ("stp", stp_scenario()),
     ]
 }
+
+/// The named scenarios read together in time order, as one capture of a
+/// busy LAN would hold them. Frames with the same time keep the order the
+/// names were given in.
+pub fn merged(names: &[&str]) -> Result<Vec<TFrame>, String> {
+    let all = scenarios();
+    let mut frames = Vec::new();
+    for name in names {
+        let (_, f) = all
+            .iter()
+            .find(|(n, _)| n == name)
+            .ok_or_else(|| format!("unknown scenario {name:?}"))?;
+        frames.extend_from_slice(f);
+    }
+    // A stable sort: each scenario is already in time order.
+    frames.sort_by_key(|f| (f.sec, f.usec));
+    Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frames_of(name: &str) -> Vec<TFrame> {
+        scenarios()
+            .into_iter()
+            .find(|(n, _)| *n == name)
+            .expect("scenario")
+            .1
+    }
+
+    #[test]
+    fn every_scenario_is_in_time_order() {
+        for (name, frames) in scenarios() {
+            assert!(
+                frames.is_sorted_by_key(|f| (f.sec, f.usec)),
+                "{name} is not in time order"
+            );
+        }
+    }
+
+    #[test]
+    fn merged_interleaves_by_time_first_named_first() {
+        let m = merged(&["mdns", "dhcp"]).expect("merged");
+        assert_eq!(m.len(), frames_of("mdns").len() + frames_of("dhcp").len());
+        assert!(m.is_sorted_by_key(|f| (f.sec, f.usec)));
+        // Both start at the same instant; the one named first comes first.
+        assert_eq!(m[0].data, frames_of("mdns")[0].data);
+        assert_eq!(m[1].data, frames_of("dhcp")[0].data);
+        assert_eq!(
+            merged(&["dhcp", "bogus"]).err().as_deref(),
+            Some("unknown scenario \"bogus\"")
+        );
+    }
+}

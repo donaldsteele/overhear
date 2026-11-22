@@ -33,6 +33,11 @@ fn main() -> ExitCode {
         Ok(a) => a,
         Err(code) => return code,
     };
+    // An unknown --proto name is a mistake on the command line, -D or not.
+    let filter = match build_filter(&args.proto, &args.filter) {
+        Ok(f) => f,
+        Err(e) => return fail(e),
+    };
 
     if args.list {
         return match platform::list_interfaces() {
@@ -50,7 +55,6 @@ fn main() -> ExitCode {
         };
     }
 
-    let filter = build_filter(&args.filter);
     let live = args.read.is_none();
     let opened = match &args.read {
         Some(path) => platform::open_file(path, &filter),

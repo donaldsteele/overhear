@@ -42,6 +42,12 @@ pub struct Args {
     /// Drop privileges to this user after opening the capture
     #[arg(short = 'Z')]
     pub user: Option<String>,
+    /// Only these protocols (comma-separated): arp, dhcp, nd, mdns, llmnr,
+    /// nbns, ssdp, lldp, cdp, stp
+    // Checked when the filter is built (filter::proto_expr), so that a
+    // mistake gets overhear's own message rather than clap's.
+    #[arg(long = "proto", value_name = "NAMES")]
+    pub proto: Vec<String>,
     /// A DHCP server you expect, optionally on one VLAN only (repeatable)
     #[arg(long = "dhcp-server", value_name = "IP[@VLAN]", value_parser = parse_dhcp_pin)]
     pub dhcp_server: Vec<(Ipv4Addr, Option<Segment>)>,
