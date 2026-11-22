@@ -23,6 +23,8 @@ impl<T: PartialEq> Bounded<T> {
             self.items.remove(0);
         }
         if self.cap > 0 {
+            // Exact growth, so len() is the allocation size the budget counts.
+            self.items.reserve_exact(1);
             self.items.push(item);
         }
     }
@@ -56,5 +58,15 @@ mod tests {
         b.push(4);
         assert_eq!(b.iter().copied().collect::<Vec<_>>(), [3, 1, 4]);
         assert_eq!(b.len(), 3);
+    }
+
+    /// The budget counts `len()` items, so the allocation must not be larger.
+    #[test]
+    fn allocation_is_exact() {
+        let mut b = Bounded::new(16);
+        for i in 0..10 {
+            b.push(i);
+            assert_eq!(b.items.capacity(), b.len());
+        }
     }
 }

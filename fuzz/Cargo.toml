@@ -10,6 +10,10 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 overhear-decode = { path = "../crates/overhear-decode" }
+overhear = { path = "../crates/overhear" }
+jiff = "1"
+serde = "1"
+serde_json = "1"
 
 [[bin]]
 name = "decode"
@@ -77,6 +81,13 @@ bench = false
 [[bin]]
 name = "stp"
 path = "fuzz_targets/stp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pipeline"
+path = "fuzz_targets/pipeline.rs"
 test = false
 doc = false
 bench = false

@@ -12,7 +12,7 @@ use crate::observe::{Observation, Segment, Ts};
 const OVERHEAD: usize = 64;
 
 pub struct DeviceTable {
-    map: HashMap<Mac, (Device, u64)>,
+    map: HashMap<Mac, (Box<Device>, u64)>,
     lru: BTreeSet<(u64, Mac)>,
     clock: u64,
     evictions: u64,
@@ -56,7 +56,7 @@ impl DeviceTable {
             let d = Device::new(mac, ts.sec);
             budget.adjust(0, d.cost() + OVERHEAD);
             self.lru.insert((stamp, mac));
-            self.map.insert(mac, (d, stamp));
+            self.map.insert(mac, (Box::new(d), stamp));
         } else if let Some((_, old)) = self.map.get_mut(&mac) {
             self.lru.remove(&(*old, mac));
             *old = stamp;
@@ -86,11 +86,11 @@ impl DeviceTable {
     }
 
     pub fn get(&self, mac: &Mac) -> Option<&Device> {
-        self.map.get(mac).map(|(d, _)| d)
+        self.map.get(mac).map(|(d, _)| &**d)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Device> {
-        self.map.values().map(|(d, _)| d)
+        self.map.values().map(|(d, _)| &**d)
     }
 
     pub fn len(&self) -> usize {

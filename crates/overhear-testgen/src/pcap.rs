@@ -45,6 +45,22 @@ fn pcap_to<W: Write>(out: W, linktype: u32, snaplen: u32, frames: &[TFrame]) -> 
     Ok(w.into_writer())
 }
 
+/// Writes an Ethernet pcap to `out` one frame at a time, for captures too big to hold.
+pub fn pcap_stream<W: Write>(out: W, frames: impl Iterator<Item = TFrame>) -> io::Result<()> {
+    let header = PcapHeader {
+        datalink: DataLink::from(1),
+        snaplen: 65535,
+        ..Default::default()
+    };
+    let mut w = PcapWriter::with_header(out, header).map_err(io_err)?;
+    for f in frames {
+        let ts = Duration::new(f.sec as u64, f.usec * 1000);
+        w.write_packet(&PcapPacket::new(ts, f.orig(), &f.data))
+            .map_err(io_err)?;
+    }
+    Ok(())
+}
+
 /// Ethernet, microsecond timestamps.
 pub fn write_pcap(path: &Path, frames: &[TFrame]) -> io::Result<()> {
     write_pcap_linktype(path, 1, frames)
