@@ -34,7 +34,7 @@ newer glibc than 2.36, so they install on Debian 12 and later and on Raspberry P
 64-bit (which is based on Debian 12).
 
 ```
-sudo apt install ./overhear_0.1.0-1_amd64.deb     # or ..._arm64.deb
+sudo apt install ./overhear_0.1.1-1_amd64.deb     # or ..._arm64.deb
 ```
 
 It installs `/usr/bin/overhear`, the manual page (`man overhear`) and this
@@ -54,7 +54,7 @@ cargo build --release
 The result is `target/release/overhear`. To build the manual page:
 
 ```
-pod2man --section 1 --center overhear --release "overhear 0.1.0" doc/overhear.pod | man -l -
+pod2man --section 1 --center overhear --release "overhear 0.1.1" doc/overhear.pod | man -l -
 ```
 
 ## Run it
@@ -149,7 +149,7 @@ A Raspberry Pi 4 with a USB or built-in Ethernet port should be enough to watch 
 network all day. For switches that support it, mirror (SPAN) the ports you care about to
 the port the Pi is plugged into:
 
-1. Install the arm64 package: `sudo apt install ./overhear_0.1.0-1_arm64.deb`.
+1. Install the arm64 package: `sudo apt install ./overhear_0.1.1-1_arm64.deb`.
 2. Give it capture rights: `sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/overhear`.
 3. Plug the Pi into the mirror port. The port does not need an IP address; leave
    it unconfigured so the Pi sends nothing there.
@@ -318,8 +318,8 @@ glibc than 2.36, and checks that each package lists the binary and the manual pa
 The results are in `dist/` (not committed):
 
 ```
-dist/overhear_0.1.0-1_amd64.deb
-dist/overhear_0.1.0-1_arm64.deb
+dist/overhear_0.1.1-1_amd64.deb
+dist/overhear_0.1.1-1_arm64.deb
 dist/testgen-arm64
 ```
 

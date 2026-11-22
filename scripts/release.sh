@@ -3,7 +3,10 @@
 # Debian 12 image, plus a testgen for the Raspberry Pi. Needs Docker. Output is in dist/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION=0.1.0
+# The version is the one in Cargo.toml, which the packages carry too.
+VERSION=$(cargo metadata --no-deps --format-version 1 |
+  jq -r '.packages[] | select(.name == "overhear") | .version')
+[ -n "$VERSION" ] && [ "$VERSION" != null ] || { echo "release.sh: no version in Cargo.toml" >&2; exit 1; }
 IMG=overhear-bookworm
 X86=x86_64-unknown-linux-gnu
 ARM=aarch64-unknown-linux-gnu

@@ -20,16 +20,16 @@ Run `scripts/release.sh` on the build machine (Docker needed). It must finish wi
 - `arm64 tests passed (max GLIBC_2.xx)`
 - `amd64: glibc ok (max GLIBC_2.xx)` and `arm64: glibc ok (max GLIBC_2.xx)`, with xx no higher than 36
 - `contents ok` for both packages
-- `dist/` holding `overhear_0.1.0-1_amd64.deb`, `overhear_0.1.0-1_arm64.deb` and `testgen-arm64`
+- `dist/` holding `overhear_0.1.1-1_amd64.deb`, `overhear_0.1.1-1_arm64.deb` and `testgen-arm64`
 
-Build on 2026-11-21: both release binaries need at most GLIBC_2.34.
+Build on 2026-11-22 (0.1.1): both release binaries need at most GLIBC_2.34.
 
 ## Raspberry Pi 4 (manual)
 
 Machine: Raspberry Pi 4, 64-bit Raspberry Pi OS (Debian 12 based). Needs `iproute2`,
 `util-linux` (for `unshare`), `libcap2-bin` (for `setcap`) and passwordless `sudo`.
 
-1. Install the arm64 package: `sudo apt install ./overhear_0.1.0-1_arm64.deb`.
+1. Install the arm64 package: `sudo apt install ./overhear_0.1.1-1_arm64.deb`.
 2. Copy `testgen-arm64` and the `scripts/` directory to the Pi, along with
    `crates/overhear/tests/data/` (the scripts read the sample captures from there).
    Lay them out like a checkout so the scripts find what they expect:

@@ -34,9 +34,9 @@
 <p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>Free and open source, MIT</span></p>
 <h1><span class="name">overhear:</span> hear what your LAN <em>announces.</em></h1>
 <p class="lede">A passive listener for your local network. It decodes what every device tells everybody, keeps a table of who is there, and warns when something looks wrong.</p>
-<div class="cta"><a class="btn primary" href="https://github.com/donaldsteele/overhear/releases/latest">Download 0.1.0</a><a class="btn secondary" href="https://github.com/donaldsteele/overhear">View on GitHub</a></div>
+<div class="cta"><a class="btn primary" href="https://github.com/donaldsteele/overhear/releases/latest">Download 0.1.1</a><a class="btn secondary" href="https://github.com/donaldsteele/overhear">View on GitHub</a></div>
 <ul class="badges" aria-label="At a glance"><li>Linux</li><li>amd64 and arm64</li><li>Never transmits</li><li>MIT licence</li></ul>
-<p class="hero-note">One small binary, as a line per packet, a verbose dump, JSON lines or a live screen. Version 0.1 is the first release: see <a href="#good-to-know">Good to know</a>.</p>
+<p class="hero-note">One small binary, as a line per packet, a verbose dump, JSON lines or a live screen. Version 0.1.1 adds <code>--proto</code>, to hear only the protocols you name. It is still an early release: see <a href="#good-to-know">Good to know</a>.</p>
 </div>
 <figure class="frame"><a href="assets/screens/live.png" aria-label="Open full size: the overhear live screen"><img src="assets/screens/live.png" width="1754" height="1090" alt="The overhear live screen: a table of 33 devices sorted by name, among them a core switch, an access point, a desk phone, a TV and two printers, above a warnings pane listing two rogue DHCP servers, an unexpected IPv6 router, an address conflict and a name-poisoning pattern" fetchpriority="high"></a></figure>
 </div>
@@ -56,7 +56,7 @@
 
 <section id="tour"><div class="wrap">
 <div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>02 / Feature tour</span></p><h2>Four ways to listen.</h2></div>
-<p class="prose intro">Every sample below is real output of overhear 0.1.0, run over the generated test captures that ship with the source.</p>
+<p class="prose intro">Every sample below is real output of overhear 0.1.1, run over the generated test captures that ship with the source.</p>
 <article class="row wide"><div class="lead"><div><span class="tag">01 / default</span><h3>One line per packet</h3></div><div><p>Each line has the time, the protocol, the source and a summary. Warnings (<code>WARN</code>) and newly learned baselines (<code>NOTE</code>) get lines of their own, right after the packet that caused them.</p><p>Here a second DHCP server answers a client, a server on VLAN 100 is learned separately, and a damaged offer is still decoded as far as it goes.</p></div></div>
 <pre class="term" role="region" tabindex="0" aria-label="Line output of overhear -r dhcp.pcap"><code><!-- sample:line --><span class="p">$ </span>overhear -r dhcp.pcap
 2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 "host-a"
@@ -464,7 +464,7 @@ second DHCP server 192.168.1.252 (expected 192.168.1.1)
 <p>On a mirror port you also see the unicast replies, so the table fills in more. The default memory budget is 64M; on a small board, turn it down.</p>
 </div>
 <pre class="term" role="region" tabindex="0" aria-label="Commands for a Raspberry Pi"><code><span class="c"># on the Pi</span>
-<span class="p">$ </span>sudo apt install ./overhear_0.1.0-1_arm64.deb
+<span class="p">$ </span>sudo apt install ./overhear_0.1.1-1_arm64.deb
 <span class="p">$ </span>sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/overhear
 
 <span class="c"># watch the mirror port</span>
@@ -483,7 +483,7 @@ second DHCP server 192.168.1.252 (expected 192.168.1.1)
 </div></section>
 
 <section id="download"><div class="wrap">
-<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>08 / Download</span></p><h2>Version 0.1.0.</h2></div>
+<div class="sec-head"><p class="folio"><svg class="mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M7.07 6.94A4 4 0 0 1 7.07 13.06M9.32 4.25A7.5 7.5 0 0 1 9.32 15.75M11.57 1.57A11 11 0 0 1 11.57 18.43"/></svg><span>08 / Download</span></p><h2>Version 0.1.1.</h2></div>
 <div class="dl">
 <div class="card"><h3>amd64</h3><p class="req">Debian 12 or later</p><ul><li>.deb for 64-bit PCs and servers</li><li>Needs libpcap 1.10 or later</li></ul><a class="btn" href="https://github.com/donaldsteele/overhear/releases/latest">Get the amd64 .deb</a></div>
 <div class="card"><h3>arm64</h3><p class="req">Raspberry Pi OS 64-bit, Debian 12 or later</p><ul><li>.deb for 64-bit Arm boards</li><li>Tested under arm64 emulation</li></ul><a class="btn" href="https://github.com/donaldsteele/overhear/releases/latest">Get the arm64 .deb</a></div>
@@ -495,7 +495,7 @@ second DHCP server 192.168.1.252 (expected 192.168.1.1)
 <p>To build it yourself you need Rust and the libpcap headers. The result is <code>target/release/overhear</code>.</p>
 </div>
 <pre class="term" role="region" tabindex="0" aria-label="Install and build commands"><code><span class="c"># install a package</span>
-<span class="p">$ </span>sudo apt install ./overhear_0.1.0-1_amd64.deb
+<span class="p">$ </span>sudo apt install ./overhear_0.1.1-1_amd64.deb
 
 <span class="c"># or build from source</span>
 <span class="p">$ </span>sudo apt install build-essential pkg-config libpcap-dev
@@ -527,7 +527,7 @@ second DHCP server 192.168.1.252 (expected 192.168.1.1)
 <div class="wrap">
 <div>
 <p>overhear is released under the <a href="https://github.com/donaldsteele/overhear/blob/main/LICENSE">MIT licence</a>.</p>
-<p>Every sample on this page is real output of overhear 0.1.0 over the generated test captures in the repository. No capture of a real network is used.</p>
+<p>Every sample on this page is real output of overhear 0.1.1 over the generated test captures in the repository. No capture of a real network is used.</p>
 </div>
 <ul aria-label="Documentation">
 <li><a href="manual.html">Manual</a></li>
