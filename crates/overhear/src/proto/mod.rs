@@ -1,8 +1,10 @@
 //! Per-protocol presentation. Protocol tasks add match arms here.
 
 pub mod arp;
+pub mod cdp;
 pub mod dhcp;
 pub mod dns;
+pub mod lldp;
 pub mod nbns;
 pub mod nd;
 pub mod other;
@@ -26,6 +28,8 @@ pub fn tag(p: &Packet<'_>) -> &'static str {
         Proto::Llmnr(_) => Flavor::Llmnr.tag(),
         Proto::Nbns(_) => nbns::tag(),
         Proto::Ssdp(_) => ssdp::tag(),
+        Proto::Lldp(_) => lldp::tag(),
+        Proto::Cdp(_) => cdp::tag(),
     }
 }
 
@@ -40,6 +44,8 @@ pub fn summary(p: &Packet<'_>, out: &mut String) {
         Proto::Llmnr(m) => dns::llmnr_summary(m, out),
         Proto::Nbns(m) => nbns::summary(m, out),
         Proto::Ssdp(m) => ssdp::summary(m, out),
+        Proto::Lldp(m) => lldp::summary(m, out),
+        Proto::Cdp(m) => cdp::summary(m, out),
     }
 }
 
@@ -54,6 +60,8 @@ pub fn verbose(p: &Packet<'_>, frame: &[u8], out: &mut String) {
         Proto::Llmnr(m) => dns::verbose(Flavor::Llmnr, m, out),
         Proto::Nbns(m) => nbns::verbose(m, out),
         Proto::Ssdp(m) => ssdp::verbose(m, out),
+        Proto::Lldp(m) => lldp::verbose(m, out),
+        Proto::Cdp(m) => cdp::verbose(m, out),
     }
 }
 
@@ -68,6 +76,8 @@ pub fn json_name(p: &Packet<'_>) -> &'static str {
         Proto::Llmnr(_) => Flavor::Llmnr.json_key(),
         Proto::Nbns(_) => "nbns",
         Proto::Ssdp(_) => "ssdp",
+        Proto::Lldp(_) => "lldp",
+        Proto::Cdp(_) => "cdp",
     }
 }
 
@@ -82,6 +92,8 @@ pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
         Proto::Llmnr(m) => dns::json(Flavor::Llmnr, m, w),
         Proto::Nbns(m) => nbns::json(m, w),
         Proto::Ssdp(m) => ssdp::json(m, w),
+        Proto::Lldp(m) => lldp::json(m, w),
+        Proto::Cdp(m) => cdp::json(m, w),
     }
 }
 
@@ -96,5 +108,7 @@ pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
         Proto::Llmnr(m) => dns::llmnr_observe(p, m, out),
         Proto::Nbns(m) => nbns::observe(p, m, out),
         Proto::Ssdp(m) => ssdp::observe(p, m, out),
+        Proto::Lldp(m) => lldp::observe(p, m, out),
+        Proto::Cdp(m) => cdp::observe(p, m, out),
     }
 }

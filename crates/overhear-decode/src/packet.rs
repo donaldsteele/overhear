@@ -1,7 +1,7 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
 use crate::{
-    Arp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Nbns, Nd, Problem, Ssdp, arp, dhcp,
-    dns, ethernet, nbns, nd, ssdp,
+    Arp, Cdp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Lldp, Nbns, Nd, Problem, Ssdp,
+    arp, cdp, dhcp, dns, ethernet, lldp, nbns, nd, ssdp,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +27,8 @@ pub enum Proto<'a> {
     Llmnr(DnsMessage<'a>),
     Nbns(Nbns<'a>),
     Ssdp(Ssdp<'a>),
+    Lldp(Lldp<'a>),
+    Cdp(Cdp<'a>),
     Other { payload: &'a [u8] },
 }
 
@@ -48,6 +50,11 @@ fn dispatch_ether<'a>(
 ) -> Option<Proto<'a>> {
     match kind {
         EthKind::EtherType(0x0806) => arp::parse(c, problems).map(Proto::Arp),
+        EthKind::EtherType(0x88cc) => lldp::parse(c, problems).map(Proto::Lldp),
+        EthKind::Snap {
+            oui: [0x00, 0x00, 0x0c],
+            pid: 0x2000,
+        } => cdp::parse(c, problems).map(Proto::Cdp),
         _ => None,
     }
 }
@@ -588,5 +595,58 @@ mod ssdp_tests {
             assert!(matches!(&p.proto, Proto::Ssdp(m) if m.headers.len() == 1));
             assert!(p.problems.is_empty());
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
+mod discovery_tests {
+    use super::*;
+    use overhear_testgen::*;
+
+    const LLDP_MCAST: [u8; 6] = [0x01, 0x80, 0xc2, 0, 0, 0x0e];
+    const CDP_MCAST: [u8; 6] = [0x01, 0x00, 0x0c, 0xcc, 0xcc, 0xcc];
+
+    fn mandatory() -> Vec<(u8, Vec<u8>)> {
+        vec![
+            (1, [&[4u8][..], &mac(1)].concat()),
+            (2, [&[5u8][..], b"p1"].concat()),
+            (3, vec![0, 120]),
+        ]
+    }
+
+    #[test]
+    fn lldp_dispatch_on_ethertype_88cc_plain_and_vlan() {
+        let b = lldp(&mandatory());
+        for f in [
+            eth(LLDP_MCAST, mac(1), 0x88cc, &b),
+            eth_vlan(LLDP_MCAST, mac(1), &[(0x8100, 10)], 0x88cc, &b),
+        ] {
+            let p = decode(&f).unwrap();
+            assert!(matches!(&p.proto, Proto::Lldp(l) if l.tlvs.len() == 3));
+            assert!(p.problems.is_empty());
+        }
+    }
+
+    #[test]
+    fn lldp_without_mandatory_falls_back_to_other() {
+        let f = eth(LLDP_MCAST, mac(1), 0x88cc, &lldp(&[(5, b"x".to_vec())]));
+        let p = decode(&f).unwrap();
+        assert!(matches!(p.proto, Proto::Other { .. }));
+        assert_eq!(p.problems.len(), 1);
+        assert_eq!(p.problems[0].layer, Layer::Lldp);
+    }
+
+    #[test]
+    fn cdp_dispatch_on_snap_cisco_2000() {
+        let b = cdp(&[(1, b"sw1".to_vec())]);
+        let f = snap(CDP_MCAST, mac(1), [0, 0, 0x0c], 0x2000, &b);
+        let p = decode(&f).unwrap();
+        assert!(matches!(&p.proto, Proto::Cdp(c) if c.tlvs.len() == 1));
+        assert!(p.problems.is_empty());
+        let f = snap(CDP_MCAST, mac(1), [0, 0, 0x0c], 0x2004, &b);
+        assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
+        let f = snap(CDP_MCAST, mac(1), [0, 0, 0x0d], 0x2000, &b);
+        assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
     }
 }

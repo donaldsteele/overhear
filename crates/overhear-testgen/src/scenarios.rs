@@ -600,6 +600,77 @@ fn ssdp_scenario() -> Vec<TFrame> {
     stamp(f)
 }
 
+fn lldp_cdp_scenario() -> Vec<TFrame> {
+    const LLDP_MCAST: [u8; 6] = [0x01, 0x80, 0xc2, 0, 0, 0x0e];
+    const CDP_MCAST: [u8; 6] = [0x01, 0x00, 0x0c, 0xcc, 0xcc, 0xcc];
+    let id = |typ: u8, sub: u8, v: &[u8]| (typ, [&[sub][..], v].concat());
+    let caps = |system: u16, enabled: u16| {
+        let mut v = system.to_be_bytes().to_vec();
+        v.extend_from_slice(&enabled.to_be_bytes());
+        (7u8, v)
+    };
+    let head = |src: u8, port: &str| {
+        vec![
+            id(1, 4, &mac(src)),
+            id(2, 5, port.as_bytes()),
+            (3u8, 120u16.to_be_bytes().to_vec()),
+        ]
+    };
+    let unit = |mut t: Vec<(u8, Vec<u8>)>| {
+        t.push((0, vec![]));
+        lldp(&t)
+    };
+    let frame = |src: u8, payload: &[u8]| (eth(LLDP_MCAST, mac(src), 0x88cc, payload), None);
+    let mut f = Vec::new();
+    // A switch: bridge and router capabilities, management address, port VLAN.
+    let mut t = head(0x60, "Gi1/0/24");
+    t.push((4, b"uplink to distribution".to_vec()));
+    t.push((5, b"core-sw1".to_vec()));
+    t.push((6, b"Acme Switch OS 4.2".to_vec()));
+    t.push(caps(0x0014, 0x0014));
+    t.push((8, vec![5, 1, 192, 168, 1, 2, 2, 0, 0, 0, 1, 0]));
+    t.push((127, vec![0x00, 0x80, 0xc2, 1, 0, 10]));
+    f.push(frame(0x60, &unit(t)));
+    // An access point.
+    let mut t = head(0x61, "eth0");
+    t.push((5, b"ap-lobby".to_vec()));
+    t.push((6, b"Acme AP 6 firmware 1.8".to_vec()));
+    t.push(caps(0x001c, 0x0008));
+    t.push((8, vec![5, 1, 192, 168, 1, 61, 2, 0, 0, 0, 1, 0]));
+    f.push(frame(0x61, &unit(t)));
+    // An LLDP-MED phone with a MED capabilities organization TLV.
+    let mut t = head(0x62, "1");
+    t.push((5, b"desk-phone-17".to_vec()));
+    t.push(caps(0x0024, 0x0020));
+    t.push((127, vec![0x00, 0x12, 0xbb, 1, 0x00, 0x33, 0x01]));
+    f.push(frame(0x62, &unit(t)));
+    // A Cisco switch speaking CDP, native VLAN 10.
+    let mut addrs = 1u32.to_be_bytes().to_vec();
+    addrs.extend_from_slice(&[1, 1, 0xcc, 0, 4, 192, 168, 1, 3]);
+    let c = cdp(&[
+        (1, b"dist-sw2.example.net".to_vec()),
+        (2, addrs),
+        (3, b"GigabitEthernet1/0/1".to_vec()),
+        (4, 0x0000_0028u32.to_be_bytes().to_vec()),
+        (5, b"Cisco IOS Software, Version 15.2(7)E".to_vec()),
+        (6, b"cisco WS-C2960X-48TS-L".to_vec()),
+        (9, b"corp".to_vec()),
+        (0x0a, 10u16.to_be_bytes().to_vec()),
+        (0x0b, vec![1]),
+    ]);
+    f.push((snap(CDP_MCAST, mac(0x63), [0, 0, 0x0c], 0x2000, &c), None));
+    // The last TLV claims 511 bytes but the frame ends first.
+    let mut t = lldp(&head(0x64, "Gi0/1"));
+    t.extend_from_slice(&(((5u16) << 9) | 0x1ff).to_be_bytes());
+    t.extend_from_slice(b"core-sw9");
+    f.push(frame(0x64, &t));
+    // A system name with a terminal escape in it.
+    let mut t = head(0x65, "Gi0/2");
+    t.push((5, b"evil\x1b[2Jsw".to_vec()));
+    f.push(frame(0x65, &unit(t)));
+    stamp(f)
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
     vec![
@@ -610,5 +681,6 @@ pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
         ("mdns", mdns_scenario()),
         ("llmnr_nbns", nbns_scenario()),
         ("ssdp", ssdp_scenario()),
+        ("lldp_cdp", lldp_cdp_scenario()),
     ]
 }

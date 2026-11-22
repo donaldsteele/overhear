@@ -139,3 +139,8 @@ fn llmnr_nbns() {
 fn ssdp() {
     golden("ssdp");
 }
+
+#[test]
+fn lldp_cdp() {
+    golden("lldp_cdp");
+}

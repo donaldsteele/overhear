@@ -1,0 +1,6 @@
+2026-11-21 13:02:11.000 LLDP  02:00:5e:10:00:60  core-sw1 port Gi1/0/24 bridge router
+2026-11-21 13:02:11.250 LLDP  02:00:5e:10:00:61  ap-lobby port eth0 ap
+2026-11-21 13:02:11.500 LLDP  02:00:5e:10:00:62  desk-phone-17 port 1 phone
+2026-11-21 13:02:11.750 CDP   02:00:5e:10:00:63  dist-sw2.example.net port GigabitEthernet1/0/1 platform cisco WS-C2960X-48TS-L
+2026-11-21 13:02:12.000 LLDP  02:00:5e:10:00:64  02:00:5e:10:00:64 port Gi0/1 [malformed: lldp truncated]
+2026-11-21 13:02:12.250 LLDP  02:00:5e:10:00:65  evil\x1b[2Jsw port Gi0/2
