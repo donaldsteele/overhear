@@ -162,6 +162,14 @@ fn json_and_tui_conflict() {
 }
 
 #[test]
+fn hex_and_tui_conflict() {
+    let out = run(&["-t", "-H", "-r", pcap_arg(&data("generic.pcap"))]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(s(&out.stderr).contains("-H and -t can not be combined"));
+    assert!(out.stdout.is_empty());
+}
+
+#[test]
 fn bad_memory_size() {
     let out = run(&["--max-memory", "3M", "-r", pcap_arg(&data("generic.pcap"))]);
     assert_eq!(out.status.code(), Some(1));

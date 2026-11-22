@@ -139,6 +139,11 @@ pub fn parse_args() -> Result<Args, ExitCode> {
     if args.verbose && args.tui {
         return Err(conflict("-v", "-t"));
     }
+    // The live screen has no place for hex dumps; they would only clutter
+    // its recent packet lines.
+    if args.hex && args.tui {
+        return Err(conflict("-H", "-t"));
+    }
     Ok(args)
 }
 

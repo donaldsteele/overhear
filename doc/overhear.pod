@@ -59,7 +59,7 @@ One JSON object per line; see L</JSON OUTPUT>. Cannot be combined with B<-t> or 
 =item B<-t>
 
 The full-screen view: a table of devices and a list of warnings. See L</KEYS>.
-Cannot be combined with B<-j> or B<-v>.
+Cannot be combined with B<-j>, B<-v> or B<-H>.
 
 =item B<-v>
 
@@ -69,7 +69,7 @@ Cannot be combined with B<-j> or B<-t>.
 =item B<-H>
 
 Add a hex dump of every frame to the line and verbose output, or a
-C<frame_hex> field to every packet object in JSON.
+C<frame_hex> field to every packet object in JSON. Cannot be combined with B<-t>.
 
 =item B<-p>
 
