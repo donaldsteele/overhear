@@ -336,6 +336,98 @@ fn nd_scenario() -> Vec<TFrame> {
     frames
 }
 
+fn mdns_frame(src: u8, payload: &[u8]) -> (Vec<u8>, Option<u32>) {
+    let ip = ipv4_udp(ip(src), Ipv4Addr::new(224, 0, 0, 251), 5353, 5353, payload);
+    (
+        eth_ipv4([0x01, 0x00, 0x5e, 0, 0, 0xfb], mac(src), &ip),
+        None,
+    )
+}
+
+fn mdns_scenario() -> Vec<TFrame> {
+    const RESPONSE: u16 = 0x8400;
+    let inst = "Living-Room-TV._googlecast._tcp.local";
+    let ptr = |name: &str, target: &str| {
+        DnsBuilder::new(RESPONSE).answer(name, 12, 1, 4500, RDataSpec::Ptr(target.into()))
+    };
+    let printer = |addr: u8| {
+        DnsBuilder::new(RESPONSE).answer("printer.local", 1, 0x8001, 120, RDataSpec::A(ip(addr)))
+    };
+    let mut f = vec![mdns_frame(
+        0x20,
+        &DnsBuilder::new(0)
+            .question("_googlecast._tcp.local", 12, 0x8001)
+            .bytes(),
+    )];
+    // A Chromecast announces itself, then says goodbye.
+    f.push(mdns_frame(
+        0x21,
+        &DnsBuilder::new(RESPONSE)
+            .answer(
+                "_googlecast._tcp.local",
+                12,
+                1,
+                4500,
+                RDataSpec::Ptr(inst.into()),
+            )
+            .answer(
+                inst,
+                33,
+                0x8001,
+                4500,
+                RDataSpec::Srv(8009, "Living-Room-TV.local".into()),
+            )
+            .answer(
+                inst,
+                16,
+                0x8001,
+                4500,
+                RDataSpec::Txt(vec!["md=Chromecast".into()]),
+            )
+            .answer("Living-Room-TV.local", 1, 0x8001, 120, RDataSpec::A(ip(33)))
+            .bytes(),
+    ));
+    f.push(mdns_frame(
+        0x21,
+        &DnsBuilder::new(RESPONSE)
+            .answer(
+                "_googlecast._tcp.local",
+                12,
+                1,
+                0,
+                RDataSpec::Ptr(inst.into()),
+            )
+            .bytes(),
+    ));
+    // Two hosts claim printer.local with different addresses.
+    f.push(mdns_frame(0x30, &printer(48).bytes()));
+    f.push(mdns_frame(0x31, &printer(49).bytes()));
+    // A question whose name is a pointer to bytes beyond itself.
+    let mut fwd = DnsBuilder::new(0).bytes();
+    fwd[4..6].copy_from_slice(&1u16.to_be_bytes());
+    fwd.extend_from_slice(&[0xc0, 0xf0, 0, 12, 0, 1]);
+    f.push(mdns_frame(0x22, &fwd));
+    // Instance names with terminal control and bidi characters, and one that
+    // needs no escaping.
+    f.push(mdns_frame(
+        0x40,
+        &ptr(
+            "_airplay._tcp.local",
+            "Evil\u{1b}[2J\u{202e}Name._airplay._tcp.local",
+        )
+        .bytes(),
+    ));
+    f.push(mdns_frame(
+        0x41,
+        &ptr(
+            "_companion-link._tcp.local",
+            "Bjørn's iPhone._companion-link._tcp.local",
+        )
+        .bytes(),
+    ));
+    stamp(f)
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
     vec![
@@ -343,5 +435,6 @@ pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
         ("arp", arp_scenario()),
         ("dhcp", dhcp_scenario()),
         ("nd", nd_scenario()),
+        ("mdns", mdns_scenario()),
     ]
 }

@@ -1,5 +1,8 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
-use crate::{Arp, Cursor, Dhcp, EthHeader, EthKind, Layer, Nd, Problem, arp, dhcp, ethernet, nd};
+use crate::{
+    Arp, Cursor, Dhcp, DnsMessage, EthHeader, EthKind, Layer, Nd, Problem, arp, dhcp, dns,
+    ethernet, nd,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdpHeader {
@@ -20,6 +23,7 @@ pub enum Proto<'a> {
     Arp(Arp),
     Dhcp(Dhcp<'a>),
     Nd(Nd<'a>),
+    Mdns(DnsMessage<'a>),
     Other { payload: &'a [u8] },
 }
 
@@ -55,6 +59,9 @@ fn dispatch_udp<'a>(
     match ip {
         IpHeader::V4(_) if bootp(udp.src_port) || bootp(udp.dst_port) => {
             dhcp::parse(c, problems).map(Proto::Dhcp)
+        }
+        _ if udp.src_port == 5353 || udp.dst_port == 5353 => {
+            dns::parse(c, problems).map(Proto::Mdns)
         }
         _ => None,
     }
@@ -422,5 +429,34 @@ mod tests {
         let ip = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 68, 67, &b);
         let f = eth_ipv6(mac(1), mac(2), &ip);
         assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
+    }
+
+    #[test]
+    fn mdns_dispatch_on_port_5353_over_v4_and_v6() {
+        let b = DnsBuilder::new(0)
+            .question("_http._tcp.local", 12, 1)
+            .bytes();
+        let ip4 = ipv4_udp(v4(10, 0, 0, 5), v4(224, 0, 0, 251), 5353, 5353, &b);
+        let ip6 = ipv6_udp(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST, 5353, 5353, &b);
+        for f in [
+            eth_ipv4(mac(1), mac(2), &ip4),
+            eth_ipv6(mac(1), mac(2), &ip6),
+        ] {
+            let p = decode(&f).unwrap();
+            assert!(matches!(&p.proto, Proto::Mdns(m) if m.questions.len() == 1));
+            assert!(p.problems.is_empty());
+        }
+        let ip = ipv4_udp(v4(10, 0, 0, 5), v4(224, 0, 0, 251), 5000, 5001, &b);
+        let f = eth_ipv4(mac(1), mac(2), &ip);
+        assert!(matches!(decode(&f).unwrap().proto, Proto::Other { .. }));
+    }
+
+    #[test]
+    fn mdns_short_payload_falls_back_to_other() {
+        let ip = ipv4_udp(v4(10, 0, 0, 5), v4(224, 0, 0, 251), 5353, 5353, &[0; 5]);
+        let f = eth_ipv4(mac(1), mac(2), &ip);
+        let p = decode(&f).unwrap();
+        assert_eq!(prob(&p), vec![(Layer::Dns, "truncated")]);
+        assert!(matches!(p.proto, Proto::Other { payload } if payload.len() == 5));
     }
 }

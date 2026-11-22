@@ -124,3 +124,8 @@ fn dhcp() {
 fn nd() {
     golden("nd");
 }
+
+#[test]
+fn mdns() {
+    golden("mdns");
+}

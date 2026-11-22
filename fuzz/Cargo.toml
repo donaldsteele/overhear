@@ -39,4 +39,11 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "dns"
+path = "fuzz_targets/dns.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]

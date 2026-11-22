@@ -1,0 +1,61 @@
+2026-11-21 13:02:11.000  82 bytes
+  ETH   02:00:5e:10:00:20 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.32 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 48
+  mDNS  query id 0 flags 0x0000 questions 1 records 0
+        Q  _googlecast._tcp.local PTR IN QU
+
+2026-11-21 13:02:11.250  182 bytes
+  ETH   02:00:5e:10:00:21 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.33 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 148
+  mDNS  response id 0 flags 0x8400 questions 0 records 4
+        AN _googlecast._tcp.local PTR IN ttl 4500 Living-Room-TV._googlecast._tcp.local
+        AN Living-Room-TV._googlecast._tcp.local SRV IN flush ttl 4500 priority 0 weight 0 port 8009 target Living-Room-TV.local
+        AN Living-Room-TV._googlecast._tcp.local TXT IN flush ttl 4500 "md=Chromecast"
+        AN Living-Room-TV.local A IN flush ttl 120 192.168.1.33
+
+2026-11-21 13:02:11.500  105 bytes
+  ETH   02:00:5e:10:00:21 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.33 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 71
+  mDNS  response id 0 flags 0x8400 questions 0 records 1
+        AN _googlecast._tcp.local PTR IN ttl 0 Living-Room-TV._googlecast._tcp.local
+
+2026-11-21 13:02:11.750  83 bytes
+  ETH   02:00:5e:10:00:30 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.48 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 49
+  mDNS  response id 0 flags 0x8400 questions 0 records 1
+        AN printer.local A IN flush ttl 120 192.168.1.48
+
+2026-11-21 13:02:12.000  83 bytes
+  ETH   02:00:5e:10:00:31 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.49 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 49
+  mDNS  response id 0 flags 0x8400 questions 0 records 1
+        AN printer.local A IN flush ttl 120 192.168.1.49
+
+2026-11-21 13:02:12.000 WARN  name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30
+2026-11-21 13:02:12.250  60 bytes
+  ETH   02:00:5e:10:00:22 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.34 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 26
+  mDNS  query id 0 flags 0x0000 questions 1 records 0
+        Q  <bad name> PTR IN
+  !     dns: compression pointer does not point backwards at 54: c0f0
+
+2026-11-21 13:02:12.500  103 bytes
+  ETH   02:00:5e:10:00:40 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.64 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 69
+  mDNS  response id 0 flags 0x8400 questions 0 records 1
+        AN _airplay._tcp.local PTR IN ttl 4500 Evil\x1b[2J\u{202e}Name._airplay._tcp.local
+
+2026-11-21 13:02:12.750  110 bytes
+  ETH   02:00:5e:10:00:41 → 01:00:5e:00:00:fb  type 0x0800
+  IPv4  192.168.1.65 → 224.0.0.251  ttl 64 proto 17
+  UDP   5353 → 5353  len 76
+  mDNS  response id 0 flags 0x8400 questions 0 records 1
+        AN _companion-link._tcp.local PTR IN ttl 4500 Bjørn's iPhone._companion-link._tcp.local
+

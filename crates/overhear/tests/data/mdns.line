@@ -1,0 +1,9 @@
+2026-11-21 13:02:11.000 mDNS  192.168.1.32       query _googlecast._tcp.local PTR
+2026-11-21 13:02:11.250 mDNS  192.168.1.33       Living-Room-TV._googlecast._tcp.local (+3 records)
+2026-11-21 13:02:11.500 mDNS  192.168.1.33       goodbye Living-Room-TV._googlecast._tcp.local
+2026-11-21 13:02:11.750 mDNS  192.168.1.48       printer.local → 192.168.1.48
+2026-11-21 13:02:12.000 mDNS  192.168.1.49       printer.local → 192.168.1.49
+2026-11-21 13:02:12.000 WARN  name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30
+2026-11-21 13:02:12.250 mDNS  192.168.1.34       query <bad name> PTR [malformed: dns compression pointer does not point backwards]
+2026-11-21 13:02:12.500 mDNS  192.168.1.64       Evil\x1b[2J\u{202e}Name._airplay._tcp.local
+2026-11-21 13:02:12.750 mDNS  192.168.1.65       Bjørn's iPhone._companion-link._tcp.local
