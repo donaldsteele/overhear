@@ -11,6 +11,8 @@ TARGET=target/bookworm
 LIMIT=GLIBC_2.36
 
 mkdir -p dist/man
+# Nothing left over from an earlier build may pass for this one.
+rm -f dist/*.deb dist/testgen-arm64
 pod2man --section 1 --center overhear --release "overhear $VERSION" doc/overhear.pod \
   | gzip -9n > dist/man/overhear.1.gz
 

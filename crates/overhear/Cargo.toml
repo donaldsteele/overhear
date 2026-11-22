@@ -1,10 +1,13 @@
 [package]
 name = "overhear"
+description = "Passively listens to a LAN and reports who is there"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 overhear-decode = { workspace = true }

@@ -9,6 +9,8 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 authors = ["Don Steele"]
+repository = "https://github.com/donaldsteele/overhear"
+homepage = "https://donaldsteele.github.io/overhear/"
 
 [workspace.dependencies]
 overhear-decode = { path = "crates/overhear-decode" }

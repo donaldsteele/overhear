@@ -243,7 +243,8 @@ the manual page, and the whole test suite again for arm64 in a Debian 12
 container (`scripts/arm64-test.sh`, which also checks the glibc limit). It ends with
 `all checks passed`. `SKIP_ARM=1 scripts/check.sh` skips the container run
 while you iterate. It needs Docker, `cargo-audit` and the Windows target
-(`rustup target add x86_64-pc-windows-msvc`).
+(`rustup target add x86_64-pc-windows-msvc`). The advisories `cargo audit` accepts for now are
+listed, with the reason, in `.cargo/audit.toml`.
 
 ### Golden files
 
