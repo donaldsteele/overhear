@@ -118,8 +118,10 @@ and every JSON field.
 The expected DHCP server and router are learned per VLAN segment: the first
 one heard is trusted and announced with a `NOTE` line. To avoid trusting whoever
 speaks first, name them with `--dhcp-server IP[@VLAN]` and `--router MAC|IPV6[@VLAN]`.
-Learned state is kept for at most 256 segments. Past that the least recently
-used segment learns again, so whoever speaks first there is trusted again.
+Untagged traffic is one segment; a priority tag (VLAN id 0) counts as untagged.
+Learned state is kept for the untagged segment and at most 256 VLAN segments. Past
+that the least recently used VLAN segment learns again, so whoever speaks first
+there is trusted again; the untagged segment is never forgotten.
 Neighbour discovery packets whose hop limit is not 255 are shown but never cause a warning.
 
 The first time a warning happens it is shown at once; repeats are counted and

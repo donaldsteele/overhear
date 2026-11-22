@@ -86,7 +86,9 @@ See L</PRIVILEGES>.
 
 A DHCP server you expect. May be given several times (a failover pair, or one
 server per VLAN). Without B<@>I<VLAN> the server is expected on every VLAN.
-I<VLAN> is an id from 0 to 4095; QinQ is written I<outer>.I<inner>. A VLAN that
+I<VLAN> is an id from 0 to 4095; QinQ is written I<outer>.I<inner>. Id 0 is a
+priority tag, which counts as untagged (see L</Segments and baselines>), so
+C<@0> pins a server for untagged traffic only. A VLAN that
 has at least one such server learns nothing on its own; see L</WARNINGS>.
 
 =item B<--router> I<MAC|IPV6>[@I<VLAN>]
@@ -481,13 +483,16 @@ likely a problem (a rogue server, a poisoning tool); low means odd and worth a l
 
 Expectations are kept B<per VLAN segment>: untagged traffic is one segment,
 each VLAN id is another, and a QinQ stack such as outer 200, inner 100
-(written C<200.100>) is its own segment. What a segment learned is announced
-once with a NOTE line (a B<baseline>); in line output a tagged segment is shown
-with its VLAN as C<[100]>.
+(written C<200.100>) is its own segment. A tag with VLAN id 0 (an 802.1p priority
+tag) does not make a segment: hosts treat such frames as untagged, and so does
+overhear, although the packet line still shows the tag as C<[0]>. What a segment
+learned is announced once with a NOTE line (a B<baseline>); in line output a
+tagged segment is shown with its VLAN as C<[100]>.
 
-Learned state is kept for at most 256 segments. When a 257th segment appears
-the segment that was used least recently is forgotten and learns again later,
-so B<whoever speaks first there is trusted again>. A VLAN-hopping or VLAN-flooding
+Learned state is kept for the untagged segment and for at most 256 VLAN segments.
+When a 257th VLAN segment appears the VLAN segment that was used least recently
+is forgotten and learns again later, so B<whoever speaks first there is trusted
+again>. The untagged segment is never forgotten. A VLAN-hopping or VLAN-flooding
 attacker can use that, so pin the servers you care about.
 
 =head2 Pinning expected servers

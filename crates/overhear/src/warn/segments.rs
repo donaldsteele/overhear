@@ -1,6 +1,7 @@
 //! What each segment learned: its DHCP server, default router and gateways.
-//! At most [`MAX_SEGMENTS`] segments keep state; making room drops the least
-//! recently used one, which then learns again.
+//! At most [`MAX_SEGMENTS`] VLAN segments keep state; making room drops the
+//! least recently used one, which then learns again. The untagged segment is
+//! never dropped: no flood of VLAN ids can make it trust a newcomer.
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
@@ -79,7 +80,7 @@ impl Segments {
         f: impl FnOnce(&mut Learned),
     ) {
         let stamp = self.touch(seg);
-        if !self.map.contains_key(&seg) && self.map.len() >= MAX_SEGMENTS {
+        if !seg.is_untagged() && !self.map.contains_key(&seg) && self.tagged() >= MAX_SEGMENTS {
             self.drop_oldest(budget);
         }
         let (before, learned) = match self.map.entry(seg) {
@@ -102,10 +103,19 @@ impl Segments {
         budget.adjust(before, cost(learned));
     }
 
+    /// VLAN segments with state (the untagged one is not counted).
+    fn tagged(&self) -> usize {
+        let untagged = usize::from(self.map.contains_key(&Segment::UNTAGGED));
+        self.map.len().saturating_sub(untagged)
+    }
+
+    /// Drops the least recently used VLAN segment.
     fn drop_oldest(&mut self, budget: &mut Budget) {
-        let Some((_, seg)) = self.lru.pop_first() else {
+        let Some(&oldest) = self.lru.iter().find(|(_, s)| !s.is_untagged()) else {
             return;
         };
+        self.lru.remove(&oldest);
+        let (_, seg) = oldest;
         if let Some((l, _)) = self.map.remove(&seg) {
             budget.adjust(cost(&l), 0);
         }

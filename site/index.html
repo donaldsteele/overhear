@@ -75,7 +75,9 @@
 2026-11-21 13:02:13.500 DHCP  192.168.1.1        ACK 192.168.1.55 to 02:00:5e:10:00:39
 2026-11-21 13:02:13.750 DHCP  192.168.1.253      OFFER 192.168.1.56 to 02:00:5e:10:00:39
 2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)
-overhear: 12 packets, 0 dropped by the kernel, 0 dropped by overhear, 5 devices<!-- /sample:line --></code></pre></article>
+2026-11-21 13:02:14.000 DHCP  192.168.1.252      [0] OFFER 192.168.1.57 to 02:00:5e:10:00:39
+2026-11-21 13:02:14.000 WARN  second DHCP server 192.168.1.252 (expected 192.168.1.1)
+overhear: 13 packets, 0 dropped by the kernel, 0 dropped by overhear, 6 devices<!-- /sample:line --></code></pre></article>
 <article class="row"><div><span class="tag">02 / -v</span><h3>Every field</h3><p>A block per packet: one line per layer and, for protocols with options or TLVs, one line each.</p><p>Here two filter words pick out a switch's LLDP announcement and a Cisco CDP one: names, ports, capabilities, management addresses, software and native VLAN.</p></div>
 <pre class="term" role="region" tabindex="0" aria-label="Verbose output of an LLDP and a CDP packet"><code><!-- sample:verbose --><span class="p">$ </span>overhear -v -r lldp_cdp.pcap \
   ether src 02:00:5e:10:00:60 or ether src 02:00:5e:10:00:63
@@ -130,7 +132,7 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
   }
 }<!-- /sample:json --></code></pre></article>
 <article class="row wide" id="live"><div class="lead"><div><span class="tag">04 / -t</span><h3>The live screen</h3></div><div><p>A table of devices with their addresses, names, vendor and the protocols heard, and a pane of warnings below: high in red, low in yellow.</p><p><kbd>q</kbd> quits, <kbd>Enter</kbd> opens a device with everything known about it, <kbd>s</kbd> changes the sort, <kbd>/</kbd> filters, <kbd>w</kbd> moves to the warnings and <kbd>p</kbd> pauses the table.</p></div></div>
-<figure class="screen-fig"><pre class="term screen" role="region" tabindex="0" aria-label="The live screen, 100 columns by 26 rows"><code><!-- sample:tui --><span class="rv"> overhear  lan.pcap   32 devices   8 warnings   root 8000.00:11:22:33:44:01   13:02:43              </span>
+<figure class="screen-fig"><pre class="term screen" role="region" tabindex="0" aria-label="The live screen, 100 columns by 26 rows"><code><!-- sample:tui --><span class="rv"> overhear  lan.pcap   33 devices   9 warnings   root 8000.00:11:22:33:44:01   13:02:43              </span>
 <span class="b">MAC               IP              NAME             VENDOR     HEARD</span>
 <span class="rv">02:00:5e:10:00:61                 ap-lobby         (random)   LLDP                                  </span>
 02:00:5e:10:00:60                 core-sw1         (random)   LLDP
@@ -149,12 +151,12 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 02:00:5e:10:00:04 2001:db8:1::50                   (random)   ND
  warnings ──────────────────────────────────────────────────────────────────────────────────────────
 <span class="lo">13:02:42  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago</span>
+<span class="hi">13:02:14  second DHCP server 192.168.1.252 (expected 192.168.1.1)</span>
 <span class="hi">13:02:13  second DHCP server 192.168.1.253 (expected 192.168.1.1)</span>
 <span class="lo">13:02:13  name FILESERVER&lt;20&gt; answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40</span>
 <span class="lo">13:02:12  name printer.local answered by 02:00:5e:10:00:31 and 02:00:5e:10:00:30</span>
 <span class="hi">13:02:12  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route</span>
 <span class="hi">13:02:11  02:00:5e:10:00:66 answers LLMNR queries for many names (wpad, fileserver, printer): the pa</span>
-<span class="lo">13:02:11  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers</span>
  q quit  ↑↓ select  enter details  s sort: name  / filter  w warnings  p pause<!-- /sample:tui --></code></pre>
 <figcaption>Drawn by overhear's own screen code over six of the test captures, read together in time order and sorted by name. The test captures use locally administered MAC addresses, so the vendor column says (random). The name on the fifth row arrived with a terminal escape sequence in it, and is shown escaped.</figcaption></figure></article>
 </div></section>
@@ -190,6 +192,7 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 <pre class="term" role="region" tabindex="0" aria-label="Warning lines from five test captures"><code><!-- sample:warnings --><span class="p">$ </span>for f in dhcp nd arp llmnr_nbns mdns; do overhear -r $f.pcap; done 2&gt;/dev/null | grep WARN
 2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
 2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)
+2026-11-21 13:02:14.000 WARN  second DHCP server 192.168.1.252 (expected 192.168.1.1)
 2026-11-21 13:02:11.750 WARN  router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
 2026-11-21 13:02:12.000 WARN  unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
 2026-11-21 13:02:42.750 WARN  2001:db8:1::50 now claimed by 02:00:5e:10:00:05, was 02:00:5e:10:00:04 30s ago
@@ -203,9 +206,11 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
 2026-11-21 13:02:12.500 WARN  [100] second DHCP server 10.9.9.9 (expected 192.168.1.1)
 2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)
+2026-11-21 13:02:14.000 WARN  second DHCP server 192.168.1.252 (expected 192.168.1.1)
 <span class="p">$ </span>overhear -r dhcp.pcap --dhcp-server 192.168.1.1 --dhcp-server 10.9.9.9@100 2&gt;/dev/null | grep WARN
 2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
-2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)<!-- /sample:pins --></code></pre>
+2026-11-21 13:02:13.750 WARN  second DHCP server 192.168.1.253 (expected 192.168.1.1)
+2026-11-21 13:02:14.000 WARN  second DHCP server 192.168.1.252 (expected 192.168.1.1)<!-- /sample:pins --></code></pre>
 </div>
 </div></section>
 
@@ -265,12 +270,14 @@ overhear: 2 packets, 0 dropped by the kernel, 0 dropped by overhear, 2 devices<!
 {"schema":1,"type":"warning","ts":1795266131.500000,"time":"2026-11-21T13:02:11.500+00:00","rule":"second-dhcp-server","severity":"high","segment":"untagged","subject":"192.168.1.254","message":"second DHCP server 192.168.1.254 (expected 192.168.1.1)","macs":["02:00:5e:10:00:fe","02:00:5e:10:00:39"],"addrs":["192.168.1.254"],"count":1}
 {"schema":1,"type":"baseline","ts":1795266132.500000,"time":"2026-11-21T13:02:12.500+00:00","segment":"100","what":"dhcp-server","ip":"10.9.9.9"}
 {"schema":1,"type":"warning","ts":1795266133.750000,"time":"2026-11-21T13:02:13.750+00:00","rule":"second-dhcp-server","severity":"high","segment":"untagged","subject":"192.168.1.253","message":"second DHCP server 192.168.1.253 (expected 192.168.1.1)","macs":["02:00:5e:10:00:fd","02:00:5e:10:00:39"],"addrs":["192.168.1.253"],"count":1}
-{"schema":1,"type":"status","final":true,"packets":12,"kernel_drops":0,"channel_drops":0,"devices":5,"evictions":0}
+{"schema":1,"type":"warning","ts":1795266134.000000,"time":"2026-11-21T13:02:14.000+00:00","rule":"second-dhcp-server","severity":"high","segment":"untagged","subject":"192.168.1.252","message":"second DHCP server 192.168.1.252 (expected 192.168.1.1)","macs":["02:00:5e:10:00:fc","02:00:5e:10:00:39"],"addrs":["192.168.1.252"],"count":1}
+{"schema":1,"type":"status","final":true,"packets":13,"kernel_drops":0,"channel_drops":0,"devices":6,"evictions":0}
 <span class="p">$ </span>overhear -j -r dhcp.pcap | jq -r 'select(.rule == "second-dhcp-server") | "\(.subject) \(.macs[0])"'
 192.168.1.254 02:00:5e:10:00:fe
 192.168.1.253 02:00:5e:10:00:fd
+192.168.1.252 02:00:5e:10:00:fc
 <span class="p">$ </span>overhear -j -r dhcp.pcap | jq -rs 'map(select(.type == "packet") | .src.mac // empty) | unique | group_by(.[:8])[] | "\(length) \(.[0][:8])"'
-5 02:00:5e<!-- /sample:jq --></code></pre>
+6 02:00:5e<!-- /sample:jq --></code></pre>
 </div>
 </div></section>
 

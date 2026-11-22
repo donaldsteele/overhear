@@ -141,7 +141,7 @@
 <dt id="dhcp-server-IP-VLAN"><b>--dhcp-server</b> <i>IP</i>[@<i>VLAN</i>]</dt>
 <dd>
 
-<p>A DHCP server you expect. May be given several times (a failover pair, or one server per VLAN). Without <b>@</b><i>VLAN</i> the server is expected on every VLAN. <i>VLAN</i> is an id from 0 to 4095; QinQ is written <i>outer</i>.<i>inner</i>. A VLAN that has at least one such server learns nothing on its own; see <a href="#WARNINGS">&quot;WARNINGS&quot;</a>.</p>
+<p>A DHCP server you expect. May be given several times (a failover pair, or one server per VLAN). Without <b>@</b><i>VLAN</i> the server is expected on every VLAN. <i>VLAN</i> is an id from 0 to 4095; QinQ is written <i>outer</i>.<i>inner</i>. Id 0 is a priority tag, which counts as untagged (see <a href="#Segments-and-baselines">&quot;Segments and baselines&quot;</a>), so <code>@0</code> pins a server for untagged traffic only. A VLAN that has at least one such server learns nothing on its own; see <a href="#WARNINGS">&quot;WARNINGS&quot;</a>.</p>
 
 </dd>
 <dt id="router-MAC-IPV6-VLAN"><b>--router</b> <i>MAC|IPV6</i>[@<i>VLAN</i>]</dt>
@@ -496,9 +496,9 @@ NOTE   a baseline just learned: &quot;expected DHCP server ... (learned)&quot;</
 
 <h2 id="Segments-and-baselines">Segments and baselines</h2>
 
-<p>Expectations are kept <b>per VLAN segment</b>: untagged traffic is one segment, each VLAN id is another, and a QinQ stack such as outer 200, inner 100 (written <code>200.100</code>) is its own segment. What a segment learned is announced once with a NOTE line (a <b>baseline</b>); in line output a tagged segment is shown with its VLAN as <code>[100]</code>.</p>
+<p>Expectations are kept <b>per VLAN segment</b>: untagged traffic is one segment, each VLAN id is another, and a QinQ stack such as outer 200, inner 100 (written <code>200.100</code>) is its own segment. A tag with VLAN id 0 (an 802.1p priority tag) does not make a segment: hosts treat such frames as untagged, and so does overhear, although the packet line still shows the tag as <code>[0]</code>. What a segment learned is announced once with a NOTE line (a <b>baseline</b>); in line output a tagged segment is shown with its VLAN as <code>[100]</code>.</p>
 
-<p>Learned state is kept for at most 256 segments. When a 257th segment appears the segment that was used least recently is forgotten and learns again later, so <b>whoever speaks first there is trusted again</b>. A VLAN-hopping or VLAN-flooding attacker can use that, so pin the servers you care about.</p>
+<p>Learned state is kept for the untagged segment and for at most 256 VLAN segments. When a 257th VLAN segment appears the VLAN segment that was used least recently is forgotten and learns again later, so <b>whoever speaks first there is trusted again</b>. The untagged segment is never forgotten. A VLAN-hopping or VLAN-flooding attacker can use that, so pin the servers you care about.</p>
 
 <h2 id="Pinning-expected-servers">Pinning expected servers</h2>
 

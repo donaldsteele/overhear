@@ -247,6 +247,21 @@ fn dhcp_scenario() -> Vec<TFrame> {
     let mut ieee802 = DhcpMsg::reply(2, ip(253), ip(56), client);
     ieee802.htype = 6;
     f.push(from(mac(0xfd), ip(253), &ieee802));
+
+    // A rogue server behind an 802.1p priority tag (VLAN id 0): still the
+    // untagged segment, so it warns instead of being learned.
+    let tagged = DhcpMsg::reply(2, ip(252), ip(57), client);
+    f.push((
+        dhcp_frame(
+            mac(0xfc),
+            ip(252),
+            bcast,
+            s2c,
+            &[(0x8100, 0)],
+            &tagged.bytes(),
+        ),
+        None,
+    ));
     stamp(f)
 }
 

@@ -27,25 +27,38 @@ impl Segment {
         len: 0,
     };
 
+    /// The segment of a frame's tags. A tag with VLAN id 0 is an 802.1p
+    /// priority tag, which hosts treat as untagged, so it adds no level: a
+    /// sender cannot get a segment (and a baseline) of its own with one.
     pub fn from_vlans(v: &Vlans) -> Segment {
         let mut s = Segment::UNTAGGED;
-        for (slot, tag) in s.ids.iter_mut().zip(v.as_slice()) {
-            *slot = tag.id;
-            s.len = s.len.saturating_add(1);
+        for tag in v.as_slice() {
+            if s.push(tag.id).is_none() {
+                break;
+            }
         }
         s
     }
 
-    /// Parses `"100"` or `"200.100"` (ids 0..=4095, at most four).
+    /// Adds a level below the others; id 0 adds none. `None` when full.
+    fn push(&mut self, id: u16) -> Option<()> {
+        if id != 0 {
+            *self.ids.get_mut(usize::from(self.len))? = id;
+            self.len = self.len.saturating_add(1);
+        }
+        Some(())
+    }
+
+    /// Parses `"100"` or `"200.100"` (ids 0..=4095, at most four). Id 0 is
+    /// a priority tag, as in [`Segment::from_vlans`]: `"0"` is untagged.
     pub fn parse(s: &str) -> Option<Segment> {
         let mut seg = Segment::UNTAGGED;
-        for part in s.split('.') {
-            if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
+        for (i, part) in s.split('.').enumerate() {
+            if i >= seg.ids.len() || part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
                 return None;
             }
             let id: u16 = part.parse().ok().filter(|id| *id <= 4095)?;
-            *seg.ids.get_mut(usize::from(seg.len))? = id;
-            seg.len = seg.len.saturating_add(1);
+            seg.push(id)?;
         }
         Some(seg)
     }
@@ -199,11 +212,47 @@ mod tests {
     #[test]
     fn segment_display_and_parse() {
         assert_eq!(Segment::UNTAGGED.to_string(), "untagged");
-        for s in ["100", "200.100", "0", "4095", "1.2.3.4"] {
+        for s in ["100", "200.100", "4095", "1.2.3.4"] {
             assert_eq!(Segment::parse(s).expect(s).to_string(), s);
         }
-        for s in ["", "4096", "1..2", "a", "1.2.3.4.5", "-1", "+1", "1."] {
+        for s in [
+            "",
+            "4096",
+            "1..2",
+            "a",
+            "1.2.3.4.5",
+            "-1",
+            "+1",
+            "1.",
+            "0.0.0.0.0",
+        ] {
             assert_eq!(Segment::parse(s), None, "{s}");
         }
+    }
+
+    /// The segment of a frame carrying `tags` (TPID, VLAN id), outer first.
+    fn seg_of(tags: &[(u16, u16)]) -> Segment {
+        let f = overhear_testgen::eth_vlan([0xff; 6], [2, 0, 0, 0, 0, 1], tags, 0x0806, &[0; 28]);
+        let p = overhear_decode::decode(&f).expect("decodes");
+        assert_eq!(
+            p.eth.vlans.as_slice().len(),
+            tags.len(),
+            "tags kept for display"
+        );
+        Segment::from_vlans(&p.eth.vlans)
+    }
+
+    #[test]
+    fn priority_tags_are_untagged() {
+        // VLAN id 0 is an 802.1p priority tag: hosts treat the frame as
+        // untagged, so it must not get a segment (and a baseline) of its own.
+        assert_eq!(seg_of(&[]), Segment::UNTAGGED);
+        assert_eq!(seg_of(&[(0x8100, 0)]), Segment::UNTAGGED);
+        assert_eq!(seg_of(&[(0x8100, 100)]).to_string(), "100");
+        assert_eq!(seg_of(&[(0x88a8, 0), (0x8100, 100)]).to_string(), "100");
+        assert_eq!(seg_of(&[(0x88a8, 200), (0x8100, 0)]).to_string(), "200");
+        // A pin written with VLAN 0 means the same.
+        assert_eq!(Segment::parse("0"), Some(Segment::UNTAGGED));
+        assert_eq!(Segment::parse("0.100"), Segment::parse("100"));
     }
 }

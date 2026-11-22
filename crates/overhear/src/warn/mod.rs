@@ -104,8 +104,9 @@ pub enum Output {
 const OVERHEAD: usize = 32;
 /// Repeat keys kept; when full, the oldest goes (see [`repeat`]).
 const MAX_REPEAT_KEYS: usize = 4096;
-/// Segments with learned state kept; when full, the least recently used
-/// segment's state goes and is learned again later.
+/// VLAN segments with learned state kept; when full, the least recently used
+/// one's state goes and is learned again later. The untagged segment keeps its
+/// state regardless.
 const MAX_SEGMENTS: usize = 256;
 /// Address claims kept (see [`lru`]).
 const MAX_CLAIMS: usize = 65536;
@@ -799,6 +800,25 @@ mod tests {
             r.see(seg(&id.to_string()), 2, &advert(1, 1800, false, false));
         }
         assert_eq!(r.w.learned_segments(), MAX_SEGMENTS);
+    }
+
+    #[test]
+    fn untagged_state_is_never_evicted() {
+        // Flooding VLAN ids must not make the untagged segment forget its
+        // server and trust whoever speaks next.
+        let mut r = Rig::new(Pins::default());
+        r.see(U, 0, &reply(ip("10.0.0.1"), 2));
+        r.see(U, 0, &advert(1, 1800, false, false));
+        for id in 1..=300u16 {
+            let out = r.see(seg(&id.to_string()), 1, &reply(ip("10.0.0.1"), 2));
+            assert!(matches!(out.as_slice(), [Output::Baseline(_)]), "{out:?}");
+        }
+        // Only the tagged segments compete for the slots.
+        assert_eq!(r.w.learned_segments(), MAX_SEGMENTS + 1);
+        let out = r.see(U, 2, &reply(ip("10.0.0.2"), 2));
+        assert_eq!(warnings(&out).len(), 1, "{out:?}");
+        let out = r.see(U, 2, &advert(2, 1800, false, false));
+        assert_eq!(warnings(&out).len(), 1, "{out:?}");
     }
 
     #[test]
