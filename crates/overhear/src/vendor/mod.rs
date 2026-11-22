@@ -126,3 +126,54 @@ mod table_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod precedence_tests {
+    use super::*;
+
+    fn mac_from(v: u64) -> Mac {
+        let b = v.to_be_bytes();
+        Mac([b[2], b[3], b[4], b[5], b[6], b[7]])
+    }
+
+    fn name(idx: u16) -> &'static str {
+        table::NAMES[usize::from(idx)]
+    }
+
+    #[test]
+    fn ma_m_and_ma_s_hits() {
+        let (k, i) = table::MA_M[0];
+        let m = mac_from((u64::from(k) << 20) | 0x5_4321);
+        assert_eq!(lookup(m), Some(name(i)));
+        let (k, i) = table::MA_S[0];
+        let m = mac_from((k << 12) | 0x321);
+        assert_eq!(lookup(m), Some(name(i)));
+    }
+
+    #[test]
+    fn longer_prefix_wins_over_enclosing_registration() {
+        // An MA-S block inside a registered MA-L must report the MA-S holder.
+        let (k, i) = *table::MA_S
+            .iter()
+            .find(|(k, i)| {
+                let l = u32::try_from(k >> 12).unwrap();
+                table::MA_L
+                    .binary_search_by_key(&l, |r| r.0)
+                    .is_ok_and(|p| table::MA_L[p].1 != *i)
+            })
+            .expect("an MA-S nested in an MA-L");
+        let l = u32::try_from(k >> 12).unwrap();
+        let outer = table::MA_L[table::MA_L.binary_search_by_key(&l, |r| r.0).unwrap()].1;
+        let m = mac_from((k << 12) | 0xabc);
+        assert_eq!(lookup(m), Some(name(i)));
+        assert_ne!(name(i), name(outer));
+        // MA-M nested in an MA-L likewise.
+        if let Some((k, i)) = table::MA_M.iter().find(|(k, i)| {
+            table::MA_L
+                .binary_search_by_key(&(k >> 4), |r| r.0)
+                .is_ok_and(|p| table::MA_L[p].1 != *i)
+        }) {
+            assert_eq!(lookup(mac_from((u64::from(*k) << 20) | 1)), Some(name(*i)));
+        }
+    }
+}
