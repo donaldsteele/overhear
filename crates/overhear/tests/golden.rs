@@ -114,3 +114,8 @@ fn generic() {
 fn arp() {
     golden("arp");
 }
+
+#[test]
+fn dhcp() {
+    golden("dhcp");
+}

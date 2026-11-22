@@ -1,0 +1,161 @@
+2026-11-21 13:02:11.000  309 bytes
+  ETH   02:00:5e:10:00:39 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  0.0.0.0 → 255.255.255.255  ttl 64 proto 17
+  UDP   68 → 67  len 275
+  DHCP  op 1 (BOOTREQUEST) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x8000
+        ciaddr 0.0.0.0 yiaddr 0.0.0.0 siaddr 0.0.0.0 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                1 (DISCOVER)
+   12 Hostname                     "host-a"
+   55 Parameter List               1, 3, 6, 15
+   61 Client Id                    "\x01\x02\x00^\x10\x009"
+
+2026-11-21 13:02:11.250  310 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 276
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.50 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                2 (OFFER)
+   54 DHCP Server Id               192.168.1.1
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.1
+
+2026-11-21 13:02:11.250 NOTE  expected DHCP server 192.168.1.1 (learned)
+2026-11-21 13:02:11.500  310 bytes
+  ETH   02:00:5e:10:00:fe → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.254 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 276
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.51 siaddr 192.168.1.254 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                2 (OFFER)
+   54 DHCP Server Id               192.168.1.254
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.254
+
+2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+2026-11-21 13:02:11.750  321 bytes
+  ETH   02:00:5e:10:00:39 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  0.0.0.0 → 255.255.255.255  ttl 64 proto 17
+  UDP   68 → 67  len 287
+  DHCP  op 1 (BOOTREQUEST) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x8000
+        ciaddr 0.0.0.0 yiaddr 0.0.0.0 siaddr 0.0.0.0 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                3 (REQUEST)
+   12 Hostname                     "host-a"
+   55 Parameter List               1, 3, 6, 15
+   61 Client Id                    "\x01\x02\x00^\x10\x009"
+   50 Address Request              192.168.1.50
+   54 DHCP Server Id               192.168.1.1
+
+2026-11-21 13:02:12.000  310 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 276
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.50 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                5 (ACK)
+   54 DHCP Server Id               192.168.1.1
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.1
+
+2026-11-21 13:02:12.250  310 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 276
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 0.0.0.0 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                6 (NAK)
+   54 DHCP Server Id               192.168.1.1
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.1
+
+2026-11-21 13:02:12.500  314 bytes
+  ETH   02:00:5e:10:00:0a → ff:ff:ff:ff:ff:ff  type 0x0800
+  VLAN  C 100 pcp 0
+  IPv4  10.9.9.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 276
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 10.9.9.50 siaddr 10.9.9.9 giaddr 10.9.9.1
+        chaddr 02:00:5e:10:00:3a
+        sname - file -
+   53 DHCP Msg Type                2 (OFFER)
+   54 DHCP Server Id               10.9.9.9
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       10.9.9.9
+
+2026-11-21 13:02:12.500 NOTE  [100] expected DHCP server 10.9.9.9 (learned)
+2026-11-21 13:02:12.750  318 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 284
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.52 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                2 (OFFER)
+   54 DHCP Server Id               192.168.1.1
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.1
+    6 Domain Server                *malformed: length not a multiple of 4* 080808080404
+
+2026-11-21 13:02:13.000  289 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 255
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.53 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                2 (OFFER)
+  !     dhcp: truncated at 285: 3604c0a8
+
+2026-11-21 13:02:13.250  313 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 279
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.54 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname (options) file (options)
+   53 DHCP Msg Type                5 (ACK)
+   54 DHCP Server Id               192.168.1.1
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.1
+   52 Overload                     3 (both)
+   12 Hostname                     "file" (from file)
+   12 Hostname                     "sname" (from sname) (continues option 12)
+
+2026-11-21 13:02:13.500  327 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+  IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+  UDP   67 → 68  len 293
+  DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+        ciaddr 0.0.0.0 yiaddr 192.168.1.55 siaddr 192.168.1.1 giaddr 0.0.0.0
+        chaddr 02:00:5e:10:00:39
+        sname - file -
+   53 DHCP Msg Type                5 (ACK)
+   54 DHCP Server Id               192.168.1.1
+   51 Address Time                 3600s
+    1 Subnet Mask                  255.255.255.0
+    3 Router                       192.168.1.1
+  121 Classless Static Route Option 10.0.1.0/24 via 192.168.1.1
+  121 Classless Static Route Option 0.0.0.0/0 via 192.168.1.1 (continues option 121)
+

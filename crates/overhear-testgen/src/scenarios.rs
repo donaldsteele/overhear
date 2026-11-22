@@ -139,7 +139,117 @@ fn arp_scenario() -> Vec<TFrame> {
     frames
 }
 
+/// A DHCP message in an Ethernet/IPv4/UDP frame.
+fn dhcp_frame(
+    src: [u8; 6],
+    src_ip: Ipv4Addr,
+    dst_ip: Ipv4Addr,
+    ports: (u16, u16),
+    vlans: &[(u16, u16)],
+    payload: &[u8],
+) -> Vec<u8> {
+    let ip = ipv4_udp(src_ip, dst_ip, ports.0, ports.1, payload);
+    eth_vlan(BCAST, src, vlans, 0x0800, &ip)
+}
+
+fn dhcp_scenario() -> Vec<TFrame> {
+    let none = Ipv4Addr::UNSPECIFIED;
+    let bcast = Ipv4Addr::BROADCAST;
+    let client = mac(0x39);
+    let (server, rogue) = (mac(1), mac(0xfe));
+    let (c2s, s2c) = ((68, 67), (67, 68));
+    let from_bytes =
+        |m: [u8; 6], ip: Ipv4Addr, b: &[u8]| (dhcp_frame(m, ip, bcast, s2c, &[], b), None);
+    let from = |m: [u8; 6], ip: Ipv4Addr, msg: &DhcpMsg| from_bytes(m, ip, &msg.bytes());
+    let mut f = Vec::new();
+    f.push((
+        dhcp_frame(
+            client,
+            none,
+            bcast,
+            c2s,
+            &[],
+            &DhcpMsg::discover(client, "host-a").bytes(),
+        ),
+        None,
+    ));
+    f.push(from(
+        server,
+        ip(1),
+        &DhcpMsg::reply(2, ip(1), ip(50), client),
+    ));
+    f.push(from(
+        rogue,
+        ip(254),
+        &DhcpMsg::reply(2, ip(254), ip(51), client),
+    ));
+    let mut req = DhcpMsg::discover(client, "host-a");
+    req.options[0] = (53, vec![3]);
+    req.options.push((50, ip(50).octets().to_vec()));
+    req.options.push((54, ip(1).octets().to_vec()));
+    f.push((
+        dhcp_frame(client, none, bcast, c2s, &[], &req.bytes()),
+        None,
+    ));
+    f.push(from(
+        server,
+        ip(1),
+        &DhcpMsg::reply(5, ip(1), ip(50), client),
+    ));
+    f.push(from(server, ip(1), &DhcpMsg::reply(6, ip(1), none, client)));
+
+    // An offer relayed from another subnet, on VLAN 100.
+    let relay_ip = Ipv4Addr::new(10, 9, 9, 1);
+    let mut relayed = DhcpMsg::reply(
+        2,
+        Ipv4Addr::new(10, 9, 9, 9),
+        Ipv4Addr::new(10, 9, 9, 50),
+        mac(0x3a),
+    );
+    relayed.giaddr = relay_ip;
+    f.push((
+        dhcp_frame(
+            mac(0x0a),
+            relay_ip,
+            bcast,
+            s2c,
+            &[(0x8100, 100)],
+            &relayed.bytes(),
+        ),
+        None,
+    ));
+
+    // A DNS option of six bytes.
+    let mut bad = DhcpMsg::reply(2, ip(1), ip(52), client);
+    bad.options.push((6, vec![8, 8, 8, 8, 4, 4]));
+    f.push(from(server, ip(1), &bad));
+
+    // An option cut off in the middle of its data.
+    let cut = DhcpMsg::reply(2, ip(1), ip(53), client).bytes();
+    f.push(from_bytes(server, ip(1), &cut[..247]));
+
+    // Options in both the file and sname fields.
+    let mut over = DhcpMsg::reply(5, ip(1), ip(54), client);
+    over.options.push((52, vec![3]));
+    over.file = vec![12, 4, b'f', b'i', b'l', b'e', 255];
+    over.sname = vec![12, 5, b's', b'n', b'a', b'm', b'e', 255];
+    f.push(from(server, ip(1), &over));
+
+    // Option 121 twice.
+    let mut routes = DhcpMsg::reply(5, ip(1), ip(55), client);
+    routes
+        .options
+        .push((121, vec![24, 10, 0, 1, 192, 168, 1, 1]));
+    routes.options.push((121, vec![0, 192, 168, 1, 1]));
+    f.push(from(server, ip(1), &routes));
+    stamp(f)
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
-    vec![("generic", generic()), ("arp", arp_scenario())]
+    vec![
+        ("generic", generic()),
+        ("arp", arp_scenario()),
+        ("dhcp", dhcp_scenario()),
+    ]
 }

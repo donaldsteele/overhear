@@ -1,6 +1,7 @@
 //! Per-protocol presentation. Protocol tasks add match arms here.
 
 pub mod arp;
+pub mod dhcp;
 pub mod other;
 
 use overhear_decode::{Packet, Proto};
@@ -13,7 +14,7 @@ pub fn tag(p: &Packet<'_>) -> &'static str {
     match &p.proto {
         Proto::Arp(_) => arp::tag(),
         Proto::Other { .. } => other::tag(p),
-        Proto::Dhcp(_) => other::tag(p), // TODO(task 21): dhcp::tag
+        Proto::Dhcp(_) => dhcp::tag(),
     }
 }
 
@@ -22,7 +23,7 @@ pub fn summary(p: &Packet<'_>, out: &mut String) {
     match &p.proto {
         Proto::Arp(a) => arp::summary(a, out),
         Proto::Other { payload } => other::summary(p, payload.len(), out),
-        Proto::Dhcp(_) => other::summary(p, 0, out), // TODO(task 21)
+        Proto::Dhcp(d) => dhcp::summary(d, out),
     }
 }
 
@@ -31,7 +32,7 @@ pub fn verbose(p: &Packet<'_>, frame: &[u8], out: &mut String) {
     match &p.proto {
         Proto::Arp(a) => arp::verbose(p, a, out),
         Proto::Other { payload } => other::verbose(payload.len(), frame, out),
-        Proto::Dhcp(_) => other::verbose(0, frame, out), // TODO(task 21)
+        Proto::Dhcp(d) => dhcp::verbose(d, out),
     }
 }
 
@@ -40,7 +41,7 @@ pub fn json_name(p: &Packet<'_>) -> &'static str {
     match &p.proto {
         Proto::Arp(_) => "arp",
         Proto::Other { .. } => "other",
-        Proto::Dhcp(_) => "other", // TODO(task 21): "dhcp"
+        Proto::Dhcp(_) => "dhcp",
     }
 }
 
@@ -49,7 +50,7 @@ pub fn json(p: &Packet<'_>, w: &mut JsonWriter) {
     match &p.proto {
         Proto::Arp(a) => arp::json(a, w),
         Proto::Other { payload } => other::json(p, payload.len(), w),
-        Proto::Dhcp(_) => other::json(p, 0, w), // TODO(task 21)
+        Proto::Dhcp(d) => dhcp::json(d, w),
     }
 }
 
@@ -58,6 +59,6 @@ pub fn observe<'a>(p: &Packet<'a>, out: &mut Vec<Observation<'a>>) {
     match &p.proto {
         Proto::Arp(a) => arp::observe(p, a, out),
         Proto::Other { .. } => other::observe(p, out),
-        Proto::Dhcp(_) => other::observe(p, out), // TODO(task 21)
+        Proto::Dhcp(d) => dhcp::observe(p, d, out),
     }
 }
