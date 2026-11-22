@@ -18,4 +18,11 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "arp"
+path = "fuzz_targets/arp.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]

@@ -87,7 +87,59 @@ fn generic() -> Vec<TFrame> {
     stamp(f)
 }
 
+fn ip(d: u8) -> Ipv4Addr {
+    Ipv4Addr::new(192, 168, 1, d)
+}
+
+fn arp_frame(dst: [u8; 6], src: [u8; 6], payload: &[u8]) -> Vec<u8> {
+    eth(dst, src, 0x0806, payload)
+}
+
+fn arp_scenario() -> Vec<TFrame> {
+    let none = [0; 6];
+    let mut f = vec![(
+        arp_frame(BCAST, mac(1), &arp(1, mac(1), ip(20), none, ip(1))),
+        None,
+    )];
+    // Reply from the router.
+    f.push((
+        arp_frame(mac(1), mac(2), &arp(2, mac(2), ip(1), mac(1), ip(20))),
+        None,
+    ));
+    // Probe, then the announcement that follows it.
+    f.push((
+        arp_frame(
+            BCAST,
+            mac(3),
+            &arp(1, mac(3), Ipv4Addr::UNSPECIFIED, none, ip(30)),
+        ),
+        None,
+    ));
+    f.push((
+        arp_frame(BCAST, mac(3), &arp(1, mac(3), ip(30), none, ip(30))),
+        None,
+    ));
+    // .50 is claimed by mac(0x0a), then by mac(0x0b) a minute later.
+    f.push((
+        arp_frame(BCAST, mac(0x0a), &arp(1, mac(0x0a), ip(50), none, ip(1))),
+        None,
+    ));
+    f.push((
+        arp_frame(BCAST, mac(0x0b), &arp(1, mac(0x0b), ip(50), none, ip(1))),
+        None,
+    ));
+    // An ARP cut off after 20 bytes.
+    let mut cut = arp_frame(BCAST, mac(4), &arp(1, mac(4), ip(40), none, ip(1)));
+    cut.truncate(14 + 20);
+    f.push((cut, None));
+    let mut frames = stamp(f);
+    for t in frames.iter_mut().skip(5) {
+        t.sec += 60;
+    }
+    frames
+}
+
 /// Every scenario as `(name, frames)`. Protocol tasks append entries.
 pub fn scenarios() -> Vec<(&'static str, Vec<TFrame>)> {
-    vec![("generic", generic())]
+    vec![("generic", generic()), ("arp", arp_scenario())]
 }

@@ -109,3 +109,8 @@ fn golden(name: &str) {
 fn generic() {
     golden("generic");
 }
+
+#[test]
+fn arp() {
+    golden("arp");
+}

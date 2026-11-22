@@ -1,5 +1,5 @@
 use crate::ip::{self, IpHeader, Ipv6Header};
-use crate::{Cursor, EthHeader, EthKind, Layer, Problem, ethernet};
+use crate::{Arp, Cursor, EthHeader, EthKind, Layer, Problem, arp, ethernet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdpHeader {
@@ -17,6 +17,7 @@ pub enum L4 {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Proto<'a> {
+    Arp(Arp),
     Other { payload: &'a [u8] },
 }
 
@@ -32,11 +33,14 @@ pub struct Packet<'a> {
 pub type Decoded<'a> = Result<Packet<'a>, Problem>;
 
 fn dispatch_ether<'a>(
-    _kind: &EthKind,
-    _c: &mut Cursor<'a>,
-    _problems: &mut Vec<Problem>,
+    kind: &EthKind,
+    c: &mut Cursor<'a>,
+    problems: &mut Vec<Problem>,
 ) -> Option<Proto<'a>> {
-    None
+    match kind {
+        EthKind::EtherType(0x0806) => arp::parse(c, problems).map(Proto::Arp),
+        _ => None,
+    }
 }
 
 fn dispatch_udp<'a>(
@@ -344,6 +348,25 @@ mod tests {
         assert!(p.ip.is_none());
         match p.proto {
             Proto::Other { payload } => assert_eq!(payload.len(), 46),
+            Proto::Arp(_) => panic!("not other"),
         }
+    }
+
+    #[test]
+    fn arp_dispatch_and_fallback() {
+        let a = arp(1, mac(1), v4(10, 0, 0, 1), [0; 6], v4(10, 0, 0, 2));
+        let f = eth(BCAST, mac(1), 0x0806, &a);
+        let p = decode(&f).unwrap();
+        assert!(matches!(p.proto, Proto::Arp(x) if x.op == 1));
+        assert!(p.problems.is_empty());
+        let mut bad = a.clone();
+        bad[4] = 8;
+        let f = eth(BCAST, mac(1), 0x0806, &bad);
+        let p = decode(&f).unwrap();
+        assert_eq!(
+            prob(&p),
+            vec![(Layer::Arp, "unsupported hardware or protocol size")]
+        );
+        assert!(matches!(p.proto, Proto::Other { payload } if payload.len() == 46));
     }
 }

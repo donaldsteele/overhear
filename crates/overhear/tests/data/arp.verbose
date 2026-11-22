@@ -1,0 +1,30 @@
+2026-11-21 13:02:11.000  60 bytes
+  ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0806
+  ARP   request sender 02:00:5e:10:00:01 192.168.1.20 target 00:00:00:00:00:00 192.168.1.1
+
+2026-11-21 13:02:11.250  60 bytes
+  ETH   02:00:5e:10:00:02 → 02:00:5e:10:00:01  type 0x0806
+  ARP   reply sender 02:00:5e:10:00:02 192.168.1.1 target 02:00:5e:10:00:01 192.168.1.20
+
+2026-11-21 13:02:11.500  60 bytes
+  ETH   02:00:5e:10:00:03 → ff:ff:ff:ff:ff:ff  type 0x0806
+  ARP   probe sender 02:00:5e:10:00:03 0.0.0.0 target 00:00:00:00:00:00 192.168.1.30
+
+2026-11-21 13:02:11.750  60 bytes
+  ETH   02:00:5e:10:00:03 → ff:ff:ff:ff:ff:ff  type 0x0806
+  ARP   announcement sender 02:00:5e:10:00:03 192.168.1.30 target 00:00:00:00:00:00 192.168.1.30
+
+2026-11-21 13:02:12.000  60 bytes
+  ETH   02:00:5e:10:00:0a → ff:ff:ff:ff:ff:ff  type 0x0806
+  ARP   request sender 02:00:5e:10:00:0a 192.168.1.50 target 00:00:00:00:00:00 192.168.1.1
+
+2026-11-21 13:03:12.250  60 bytes
+  ETH   02:00:5e:10:00:0b → ff:ff:ff:ff:ff:ff  type 0x0806
+  ARP   request sender 02:00:5e:10:00:0b 192.168.1.50 target 00:00:00:00:00:00 192.168.1.1
+
+2026-11-21 13:03:12.250 WARN  192.168.1.50 now claimed by 02:00:5e:10:00:0b, was 02:00:5e:10:00:0a 1m ago
+2026-11-21 13:03:12.500  34 bytes
+  ETH   02:00:5e:10:00:04 → ff:ff:ff:ff:ff:ff  type 0x0806
+  DATA  20 bytes
+  !     arp: truncated at 14: 000108000604000102005e100004c0a801280000
+

@@ -11,6 +11,7 @@
 
 //! Pure, never-panic packet decoders.
 
+mod arp;
 mod cursor;
 mod ether;
 mod ip;
@@ -18,6 +19,7 @@ mod mac;
 mod packet;
 mod problem;
 
+pub use arp::{Arp, ArpKind, parse as parse_arp};
 pub use cursor::Cursor;
 pub use ether::{EthHeader, EthKind, Vlan, Vlans, ethernet};
 pub use ip::{Frag, IpHeader, Ipv4Header, Ipv6Header};
