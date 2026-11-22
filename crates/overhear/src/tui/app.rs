@@ -223,39 +223,32 @@ impl App {
             .filter(|d| self.frozen.as_ref().is_none_or(|f| f.contains(&d.mac)))
             .filter(|d| needle.is_empty() || self.matches(d, &needle))
             .collect();
-        devices.sort_by(|a, b| self.compare(a, b).then_with(|| a.mac.0.cmp(&b.mac.0)));
+        devices.sort_by_cached_key(|d| (self.sort_key(d), d.mac.0));
         devices.into_iter().map(|d| d.mac).collect()
     }
 
-    fn compare(&self, a: &Device, b: &Device) -> std::cmp::Ordering {
-        // Devices without a value sort after those with one.
-        fn present<T: Ord>(a: Option<T>, b: Option<T>) -> std::cmp::Ordering {
-            match (a, b) {
-                (Some(x), Some(y)) => x.cmp(&y),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
-        }
+    /// Sort key of one device; devices without a value sort last.
+    /// (absent, number, address bits, text)
+    fn sort_key(&self, d: &Device) -> (bool, i128, u128, String) {
         match self.sort {
-            Sort::LastHeard => b.last_heard.cmp(&a.last_heard),
-            Sort::Mac => std::cmp::Ordering::Equal,
-            Sort::Ip => present(first_ip(a), first_ip(b)),
-            Sort::Name => present(
-                a.display_name()
-                    .map(|n| escaped(n, LINE_FIELD_MAX).to_lowercase()),
-                b.display_name()
-                    .map(|n| escaped(n, LINE_FIELD_MAX).to_lowercase()),
-            ),
-            Sort::Vendor => present(
-                Some(vendor_short(a))
-                    .filter(|v| !v.is_empty())
-                    .map(|v| v.to_lowercase()),
-                Some(vendor_short(b))
-                    .filter(|v| !v.is_empty())
-                    .map(|v| v.to_lowercase()),
-            ),
-            Sort::Packets => b.packets.cmp(&a.packets),
+            Sort::LastHeard => (false, -i128::from(d.last_heard), 0, String::new()),
+            Sort::Mac => (false, 0, 0, String::new()),
+            Sort::Packets => (false, -i128::from(d.packets), 0, String::new()),
+            Sort::Ip => match first_ip(d) {
+                Some(std::net::IpAddr::V4(a)) => {
+                    (false, 0, u128::from(u32::from(a)), String::new())
+                }
+                Some(std::net::IpAddr::V6(a)) => (false, 1, u128::from(a), String::new()),
+                None => (true, 0, 0, String::new()),
+            },
+            Sort::Name => match d.display_name() {
+                Some(n) => (false, 0, 0, escaped(n, LINE_FIELD_MAX).to_lowercase()),
+                None => (true, 0, 0, String::new()),
+            },
+            Sort::Vendor => {
+                let v = vendor_short(d);
+                (v.is_empty(), 0, 0, v.to_lowercase())
+            }
         }
     }
 
@@ -332,6 +325,9 @@ impl App {
             }
             return Flow::Continue;
         }
+        // Keys act on what the screen shows: write the clamp back.
+        let rows = self.visible_rows(tracker);
+        self.selected = self.selected.min(rows.len().saturating_sub(1));
         match key.code {
             KeyCode::Char('q') => return Flow::Stop,
             KeyCode::Up
@@ -343,12 +339,11 @@ impl App {
                 if self.warn_focus {
                     self.scroll_warnings(key.code);
                 } else {
-                    let len = self.visible_rows(tracker).len();
+                    let len = rows.len();
                     self.move_selection(key.code, len);
                 }
             }
             KeyCode::Enter if !self.warn_focus => {
-                let rows = self.visible_rows(tracker);
                 self.detail = rows.get(self.selected).copied();
             }
             KeyCode::Esc => self.warn_focus = false,
@@ -684,5 +679,49 @@ mod tests {
         assert_eq!(app.recent_macs(), 256);
         assert_eq!(app.recent_lines(&first).count(), 2);
         assert_eq!(app.recent_lines(&Mac([2, 0, 0, 0, 0, 1])).count(), 0);
+    }
+
+    #[test]
+    fn enter_after_list_shrinks_opens_last_visible_row() {
+        let mut t = tracker();
+        add(&mut t, 1, mac(1), b"alpha");
+        add(&mut t, 2, mac(2), b"beta");
+        add(&mut t, 3, mac(3), b"gamma");
+        let mut app = App::new("x".into());
+        press(&mut app, &t, KeyCode::End);
+        assert_eq!(app.selected, 2);
+        // Narrow to one row without touching the selection.
+        app.filter = "beta".into();
+        press(&mut app, &t, KeyCode::Enter);
+        assert_eq!(app.detail, Some(mac(2)));
+        assert_eq!(app.selected, 0);
+    }
+
+    #[test]
+    fn row_order_for_mac_and_packets_sort() {
+        let mut t = tracker();
+        add(&mut t, 1, mac(3), b"c");
+        add(&mut t, 2, mac(1), b"a");
+        add(&mut t, 3, mac(2), b"b");
+        // Extra packets for mac(3), which is the oldest.
+        for _ in 0..2 {
+            t.apply(
+                Segment::UNTAGGED,
+                Ts { sec: 4, usec: 0 },
+                &[Observation::Heard {
+                    mac: mac(3),
+                    proto: ProtoTag::Arp,
+                }],
+                &mut Vec::new(),
+            );
+        }
+        let mut app = App::new("x".into());
+        assert_eq!(app.visible_rows(&t), vec![mac(3), mac(2), mac(1)]);
+        app.sort = Sort::Mac;
+        assert_eq!(app.visible_rows(&t), vec![mac(1), mac(2), mac(3)]);
+        app.sort = Sort::Packets;
+        assert_eq!(app.visible_rows(&t)[0], mac(3));
+        app.sort = Sort::Name;
+        assert_eq!(app.visible_rows(&t), vec![mac(1), mac(2), mac(3)]);
     }
 }

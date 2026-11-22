@@ -45,9 +45,17 @@ pub(super) fn escaped(bytes: &[u8], max: usize) -> String {
 fn header(app: &App, tracker: &Tracker, clock: &str) -> String {
     let w = app.total_warnings;
     let mut s = format!(
-        " overhear  {}   {} devices   {w} warning{}",
+        " overhear  {}   {} devices{}   {w} warning{}",
         escaped(app.label.as_bytes(), LINE_FIELD_MAX),
         tracker.table.len(),
+        if app.filter.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " (filter: {})",
+                escaped(app.filter.as_bytes(), LINE_FIELD_MAX)
+            )
+        },
         if w == 1 { "" } else { "s" },
     );
     if let Some(r) = tracker.table.stp_root() {
