@@ -70,3 +70,30 @@ pub fn check_filter(filter: &str) -> Result<(), PlatformError> {
 pub fn stdout_is_file() -> bool {
     imp::stdout_is_file()
 }
+
+/// What `drop_privileges` did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PrivReport {
+    SwitchedUser { user: String, uid: u32, gid: u32 },
+    CapabilitiesCleared,
+    Unchanged,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PrivOpts {
+    /// The `-Z` user; only used when started as root.
+    pub user: Option<String>,
+}
+
+/// Gives up root (or any file capabilities) and forbids gaining privileges
+/// again. Call after the capture is open and before reading any packet.
+pub fn drop_privileges(opts: &PrivOpts) -> Result<PrivReport, PlatformError> {
+    imp::drop_privileges(opts)
+}
+
+/// Makes the next SIGINT or SIGTERM kill the process: resets both to the
+/// default action and re-raises SIGINT. Used for a second Ctrl-C when the
+/// first did not stop the run in time.
+pub fn force_exit_on_signal() {
+    imp::force_exit_on_signal()
+}

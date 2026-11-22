@@ -85,6 +85,9 @@ impl<T: Activated + ?Sized> Source for PcapSource<T> {
         })
     }
 
+    /// Wakes a blocked live capture via `pcap_breakloop`. On Linux this
+    /// needs libpcap 1.10 or newer; older versions leave a read blocked on a
+    /// quiet interface blocked until the next packet arrives.
     fn waker(&mut self) -> Option<Waker> {
         // pcap_breakloop: the blocked read returns PCAP_ERROR_BREAK, which
         // arrives here as NoMorePackets, so `End`.

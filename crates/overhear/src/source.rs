@@ -68,6 +68,8 @@ pub trait Source: Send {
     /// then returns soon, usually with `End`. `None` when reads never block
     /// for long. Needed because a read timeout is not enough: libpcap on
     /// Linux waits for the next packet however long that takes.
+    /// A live libpcap source needs libpcap 1.10 or newer on Linux for the
+    /// wake (`pcap_breakloop`) to interrupt a blocked read.
     fn waker(&mut self) -> Option<Waker> {
         None
     }

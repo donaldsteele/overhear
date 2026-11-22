@@ -13,3 +13,11 @@ pub fn resolve_interface(_name: &str) -> Result<String, PlatformError> {
 pub fn stdout_is_file() -> bool {
     false
 }
+
+pub fn drop_privileges(_opts: &super::PrivOpts) -> Result<super::PrivReport, PlatformError> {
+    Ok(super::PrivReport::Unchanged)
+}
+
+pub fn force_exit_on_signal() {
+    std::process::exit(130)
+}

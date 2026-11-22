@@ -8,7 +8,7 @@ use overhear::cli::{Mode, parse_args};
 use overhear::engine::{Config, Engine, RunEnd};
 use overhear::filter::build_filter;
 use overhear::pipeline::{self, Flow, PipelineOpts, run_threaded};
-use overhear::platform;
+use overhear::platform::{self, PrivOpts};
 use overhear::render::json::JsonRenderer;
 use overhear::render::line::LineRenderer;
 use overhear::render::verbose::VerboseRenderer;
@@ -70,7 +70,13 @@ fn main() -> ExitCode {
         ));
     }
 
-    // Task 14 drops privileges here, after the capture is open.
+    // Give up root or file capabilities now that the capture is open, before
+    // any packet byte is decoded.
+    if let Err(e) = platform::drop_privileges(&PrivOpts {
+        user: args.user.clone(),
+    }) {
+        return fail(e);
+    }
 
     let mode = args.mode();
     let text = TextOpts {
@@ -97,7 +103,14 @@ fn main() -> ExitCode {
     // captured are shown.
     let stop = Arc::new(AtomicBool::new(false));
     let handler_stop = Arc::clone(&stop);
-    if let Err(e) = ctrlc::set_handler(move || handler_stop.store(true, Ordering::SeqCst)) {
+    let handler = move || {
+        // A second signal means the first did not end the run (a stalled
+        // writer, a quiet stdin): die by the signal.
+        if handler_stop.swap(true, Ordering::SeqCst) {
+            platform::force_exit_on_signal();
+        }
+    };
+    if let Err(e) = ctrlc::set_handler(handler) {
         return fail(format!("cannot handle signals: {e}"));
     }
 
