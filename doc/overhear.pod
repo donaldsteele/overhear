@@ -1,0 +1,778 @@
+=encoding utf8
+
+=head1 NAME
+
+overhear - passively listen to a LAN and report who is there
+
+=head1 SYNOPSIS
+
+B<overhear> [B<-i> I<iface> | B<-r> I<file>] [B<-j> | B<-t> | B<-v>] [B<-H>] [B<-p>] [B<-Z> I<user>]
+[B<--dhcp-server> I<IP>[@I<VLAN>]] [B<--router> I<MAC|IPV6>[@I<VLAN>]]
+[B<--max-memory> I<size>] [I<filter> ...]
+
+B<overhear> B<-D>
+
+=head1 DESCRIPTION
+
+B<overhear> listens to the traffic that every device on a local network sends to
+everybody (broadcasts and multicasts, ARP, DHCP, IPv6 neighbour discovery, mDNS,
+LLMNR, NetBIOS name service, SSDP, LLDP, CDP and spanning tree), decodes it, and
+tells you which devices are there, what they call themselves, and whether
+anything looks wrong: a second DHCP server, a router advertisement from a machine
+that should not send one, two devices claiming one address, name-poisoning tools.
+
+It is B<passive>. It never transmits a packet, never answers a query, and
+never looks up a name or fetches a URL itself. It can therefore be left on a
+mirror port or a tap of a network you do not control.
+
+Output goes to standard output as one line per packet (the default), a
+multi-line block per packet (B<-v>), one JSON object per line (B<-j>), or a
+full-screen device list (B<-t>). Notes for a human (the packet total, errors)
+go to standard error.
+
+The capture is opened first, and then privileges are dropped
+(see L</PRIVILEGES>). Every byte that arrives is treated as hostile: text that
+came off the wire is escaped before it is printed, so a device cannot send
+terminal control sequences to you.
+
+Only Ethernet is decoded, with any number of 802.1Q or 802.1ad (QinQ) VLAN tags.
+Other link types are refused.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-i> I<iface>
+
+Capture from this interface. Without B<-i> and B<-r>, the system's default
+capture device is used. B<-i> and B<-r> cannot be combined.
+
+=item B<-r> I<file>
+
+Read packets from a pcap or pcapng file instead of capturing. B<-r -> reads
+the capture from standard input. Times are then shown with the date.
+
+=item B<-j>
+
+One JSON object per line; see L</JSON OUTPUT>. Cannot be combined with B<-t> or B<-v>.
+
+=item B<-t>
+
+The full-screen view: a table of devices and a list of warnings. See L</KEYS>.
+Cannot be combined with B<-j> or B<-v>.
+
+=item B<-v>
+
+Verbose: a multi-line block with every decoded field for each packet.
+Cannot be combined with B<-j> or B<-t>.
+
+=item B<-H>
+
+Add a hex dump of every frame to the line and verbose output, or a
+C<frame_hex> field to every packet object in JSON.
+
+=item B<-p>
+
+Do not put the interface in promiscuous mode. You will then see only traffic
+addressed to this machine, plus broadcasts and multicasts.
+
+=item B<-Z> I<user>
+
+When started as root, switch to this user once the capture is open
+(default: C<nobody>). Ignored, with a note, when not started as root.
+See L</PRIVILEGES>.
+
+=item B<--dhcp-server> I<IP>[@I<VLAN>]
+
+A DHCP server you expect. May be given several times (a failover pair, or one
+server per VLAN). Without B<@>I<VLAN> the server is expected on every VLAN.
+I<VLAN> is an id from 0 to 4095; QinQ is written I<outer>.I<inner>. A VLAN that
+has at least one such server learns nothing on its own; see L</WARNINGS>.
+
+=item B<--router> I<MAC|IPV6>[@I<VLAN>]
+
+An IPv6 router you expect, by MAC address or by link-local address, optionally
+for one VLAN only. May be given several times.
+
+=item B<--max-memory> I<size>
+
+A budget for the state overhear keeps (devices and what is known about them,
+warning state). A number with an optional C<K>, C<M> or C<G> suffix (powers of
+1024). The default is C<64M> and the smallest allowed is C<4M>. See L</MEMORY>.
+
+=item B<-D>
+
+List the interfaces that can be captured from, one per line (name, description
+and addresses separated by tabs), and exit.
+
+=item I<filter> ...
+
+Extra capture filter words in pcap-filter(7) syntax. They are joined with
+the built-in filter by B<and>; see L</Capture filter>.
+
+=item B<-h>, B<--help>, B<-V>, B<--version>
+
+Print the help or the version and exit.
+
+=back
+
+=head2 Capture filter
+
+Without filter words overhear asks the kernel for just what it can decode:
+
+    ether broadcast or ether multicast or arp or udp port 67
+    or udp port 68 or udp port 137 or udp port 1900
+    or udp port 5353 or udp port 5355
+    or (icmp6 and ip6[40] >= 133 and ip6[40] <= 137)
+
+(that is: broadcast and multicast frames, ARP, DHCP, NetBIOS name service, SSDP,
+mDNS, LLMNR, and the five IPv6 neighbour discovery message types). The same
+expression is also applied to frames carrying one VLAN tag, because the
+pcap B<vlan> keyword shifts everything after it.
+
+Filter words you give are joined to that with B<and>, for both the untagged and the
+tagged arm. This narrows what is shown; it can never widen it. For example
+C<overhear -i eth0 host 192.168.1.1> shows only traffic to or from that host
+that the built-in filter also accepts.
+
+Limit: a user filter makes the VLAN arm a single C<vlan> arm. Frames with
+B<two> or more tags (QinQ) are therefore not matched by a user filter when they
+are unicast; QinQ broadcast and multicast frames still are. Without a user filter
+this does not apply.
+
+=head1 OUTPUT
+
+=head2 Line output
+
+One line per packet, starting with the time (C<HH:MM:SS.mmm> when capturing,
+with the date when reading a file), a protocol tag, the source (the IP address,
+or the MAC address when there is no IP or it is C<0.0.0.0>), and a summary.
+VLAN tags are shown as C<[100]> or C<[200.100]> (outer first) before the
+summary. A packet that decoded only partly ends with C<[malformed: >I<layer reason>C<]>.
+Frames too short for Ethernet are shown as C<short frame>.
+
+Warnings and notes are lines of their own, directly after the packet that
+caused them:
+
+    WARN   a warning (see WARNINGS)
+    NOTE   a baseline just learned: "expected DHCP server ... (learned)"
+
+Taken from the sample captures that ship with the tests (the DHCP scenario, which has one
+rogue server and one server on VLAN 100):
+
+    2026-11-21 13:02:11.000 DHCP  02:00:5e:10:00:39  DISCOVER from 02:00:5e:10:00:39 "host-a"
+    2026-11-21 13:02:11.250 DHCP  192.168.1.1        OFFER 192.168.1.50 to 02:00:5e:10:00:39
+    2026-11-21 13:02:11.250 NOTE  expected DHCP server 192.168.1.1 (learned)
+    2026-11-21 13:02:11.500 DHCP  192.168.1.254      OFFER 192.168.1.51 to 02:00:5e:10:00:39
+    2026-11-21 13:02:11.500 WARN  second DHCP server 192.168.1.254 (expected 192.168.1.1)
+
+    2026-11-21 13:02:12.500 DHCP  10.9.9.1           [100] OFFER 10.9.9.50 to 02:00:5e:10:00:3a
+    2026-11-21 13:02:12.500 NOTE  [100] expected DHCP server 10.9.9.9 (learned)
+
+(The second pair of lines is lines 9 and 10 of the same sample.)
+
+At the end of a run, a line on standard error gives the total:
+
+    N packets, N dropped by the kernel, N dropped by overhear, N devices
+
+If the kernel or overhear drops frames while running, a C<capture-drops> warning is
+shown at once, so that a quiet screen is not mistaken for a quiet network.
+
+=head2 Verbose output
+
+B<-v> prints a block per packet: the time and length, then one indented
+line per layer (C<ETH>, C<IPv4> or C<IPv6>, C<UDP>, the application protocol) and,
+for DHCP and the like, one line per option. Warnings and notes are printed as the same
+single lines as in line output. A DHCP offer:
+
+    2026-11-21 13:02:11.250  310 bytes
+      ETH   02:00:5e:10:00:01 → ff:ff:ff:ff:ff:ff  type 0x0800
+      IPv4  192.168.1.1 → 255.255.255.255  ttl 64 proto 17
+      UDP   67 → 68  len 276
+      DHCP  op 2 (BOOTREPLY) htype 1 (ethernet) hlen 6 hops 0 xid 3903f326 secs 0 flags 0x0000
+            ciaddr 0.0.0.0 yiaddr 192.168.1.50 siaddr 192.168.1.1 giaddr 0.0.0.0
+            chaddr 02:00:5e:10:00:39
+            sname - file -
+       53 DHCP Msg Type                2 (OFFER)
+       54 DHCP Server Id               192.168.1.1
+       51 Address Time                 3600s
+        1 Subnet Mask                  255.255.255.0
+        3 Router                       192.168.1.1
+
+=head1 JSON OUTPUT
+
+With B<-j> every line is one complete JSON object. Every object has
+C<"schema":1> as its first member and a C<"type"> member that says what it is.
+New members may be added in later versions; the schema number changes
+only when an existing member changes meaning.
+
+The sample objects below are taken from the files shipped with the test suite. Some are
+shown with line breaks added; overhear itself writes each object on one line.
+
+=head2 Line types
+
+=over 4
+
+=item C<"type":"packet">
+
+One per frame. Members:
+
+=over 4
+
+=item C<ts>
+
+Capture time, seconds since the epoch with microseconds (a number such as
+C<1795266131.000000>).
+
+=item C<time>
+
+The same instant as ISO 8601 text in the local time zone, with milliseconds
+and a UTC offset; C<null> if it cannot be written as a date.
+
+=item C<len>
+
+The length of the frame on the wire.
+
+=item C<caplen>
+
+Only present when the capture kept less than the whole frame: the number of
+bytes captured.
+
+=item C<vlan>
+
+Only present for tagged frames: an array of C<{"type":"C","id":100}> objects,
+outermost tag first. The type is C<C> for 802.1Q (0x8100), C<S> for 802.1ad
+(0x88a8) and C<Q> for the older 0x9100.
+
+=item C<src>, C<dst>
+
+Objects with C<mac> and, when the frame carried an IP header, C<ip>.
+Absent for frames too short to have an Ethernet header.
+
+=item C<frag>
+
+Only for fragmented IP packets: C<"first"> or C<"later">. A later fragment has no
+transport header, so it is shown as C<other>.
+
+=item C<proto>
+
+The protocol of the payload, and the name of the member that holds its details:
+C<arp>, C<dhcp>, C<nd>, C<mdns>, C<llmnr>, C<nbns>, C<ssdp>, C<lldp>, C<cdp>,
+C<stp> or C<other>. C<short> is used for a frame too short to decode, and then
+there is no protocol member.
+
+=item C<problems>
+
+Only present when the packet was damaged or odd: an array of objects with
+C<layer>, C<reason>, C<offset> (into the frame) and C<hex> (up to 32 bytes starting at
+that offset). The
+rest of the packet is still decoded as far as possible.
+
+=item C<frame_hex>
+
+With B<-H>: the whole frame in hexadecimal.
+
+=back
+
+=item C<"type":"warning">
+
+A warning. Members: C<ts> and C<time> as above; C<rule> (one of
+C<second-dhcp-server>, C<unexpected-router>, C<address-conflict>,
+C<suspicious-name-answers>, C<capture-drops>, C<memory-eviction>);
+C<severity> (C<"high"> or C<"low">); C<segment> (the VLAN, C<"untagged"> or a
+tag such as C<"200.100">; absent for C<capture-drops> and C<memory-eviction>);
+C<subject> (what the warning is about, and the key used to limit repeats);
+C<message> (the same text as the WARN line); C<macs> and C<addrs> (arrays of
+the MAC and IP addresses involved); C<count> (1, or the number of occurrences a
+repeat summary stands for).
+
+=item C<"type":"baseline">
+
+What a segment learned to expect. Members: C<ts>, C<time>, C<segment>,
+C<what> (C<"dhcp-server"> or C<"router">), C<ip> and, for a router, C<mac>.
+
+=item C<"type":"status">
+
+Drop and eviction counters. While running, a line with C<"final":false>, C<ts>
+(seconds, integer), C<kernel_drops>, C<channel_drops> and C<evictions> is
+written whenever the drop counts grow. The last line of a complete run has
+C<"final":true>, C<packets>, C<kernel_drops>, C<channel_drops>, C<devices>
+and C<evictions>. A run that stops on an error (for example a truncated capture file)
+does not write the final line, so its absence means the output may be incomplete.
+
+=back
+
+=head2 Packets
+
+A frame with two VLAN tags (QinQ), outer tag first:
+
+    {"schema":1,"type":"packet","ts":1795266132.000000,"time":"2026-11-21T13:02:12.000+00:00","len":60,"vlan":[{"type":"S","id":200},{"type":"C","id":100}],"src":{"mac":"02:00:5e:10:00:05","ip":"10.0.0.5"},"dst":{"mac":"ff:ff:ff:ff:ff:ff","ip":"255.255.255.255"},"proto":"other","other":{"ethertype":2048,"ip_proto":17,"src_port":12345,"dst_port":9,"payload_len":5}}
+
+An ARP request:
+
+    {"schema":1,"type":"packet","ts":1795266131.000000,"time":"2026-11-21T13:02:11.000+00:00","len":60,"src":{"mac":"02:00:5e:10:00:01"},"dst":{"mac":"ff:ff:ff:ff:ff:ff"},"proto":"arp","arp":{"op":1,"kind":"request","sender_mac":"02:00:5e:10:00:01","sender_ip":"192.168.1.20","target_mac":"00:00:00:00:00:00","target_ip":"192.168.1.1"}}
+
+Fields that are not valid UTF-8 are written as the member's name with C<_hex>
+added (for example C<name_hex>) holding the bytes in hexadecimal, so that text from the
+network cannot break the JSON.
+
+=head2 Protocol objects
+
+=over 4
+
+=item C<arp>
+
+C<op>, C<kind> (C<request>, C<reply>, C<probe> or C<announcement>),
+C<sender_mac>, C<sender_ip>, C<target_mac>, C<target_ip>.
+
+=item C<dhcp>
+
+C<op>, C<op_text>, C<htype>, C<htype_text>, C<hlen>, C<hops>, C<xid>
+(hexadecimal text), C<secs>, C<flags> (number), C<ciaddr>, C<yiaddr>, C<siaddr>,
+C<giaddr>, C<chaddr>, C<sname>, C<file> and C<options>. Each option has C<code>,
+C<name>, C<len> and C<value>; some have C<text> (for example C<"OFFER"> for the
+message type). An option that could not be decoded has C<malformed> (the reason)
+and C<hex> instead of a decoded value. An option found in the C<sname> or C<file>
+fields (option overload) has C<source>. C<sname> and C<file> are C<null> when the
+overload option says those fields hold options.
+
+=item C<nd>
+
+C<type> is C<rs>, C<ra>, C<ns>, C<na>. Router advertisements have
+C<cur_hop_limit>, C<flags>, C<managed>, C<other>, C<lifetime>, C<reachable>,
+C<retrans>; neighbour advertisements have C<flags>, C<router>, C<solicited>,
+C<override>, C<target>; neighbour solicitations have C<target>. All have
+C<options>, an array whose members have a C<type>: C<source_lla> and
+C<target_lla> (C<mac>), C<prefix> (C<prefix>, C<len>, C<on_link>,
+C<autonomous>, C<valid>, C<preferred>), C<rdnss> (C<lifetime>, C<servers>) and
+C<route> (C<prefix>, C<len>, C<pref>, C<lifetime>). A router advertisement
+sample:
+
+    {
+      "schema": 1,
+      "type": "packet",
+      "ts": 1795266131.250000,
+      "time": "2026-11-21T13:02:11.250+00:00",
+      "len": 134,
+      "src": {
+        "mac": "02:00:5e:10:00:01",
+        "ip": "fe80::1"
+      },
+      "dst": {
+        "mac": "33:33:00:00:00:01",
+        "ip": "ff02::1"
+      },
+      "proto": "nd",
+      "nd": {
+        "type": "ra",
+        "cur_hop_limit": 64,
+        "flags": 0,
+        "managed": false,
+        "other": false,
+        "lifetime": 1800,
+        "reachable": 0,
+        "retrans": 0,
+        "options": [
+          {
+            "type": "source_lla",
+            "mac": "02:00:5e:10:00:01"
+          },
+          {
+            "type": "prefix",
+            "prefix": "2001:db8:1::",
+            "len": 64,
+            "on_link": true,
+            "autonomous": true,
+            "valid": 2592000,
+            "preferred": 604800
+          },
+          {
+            "type": "rdnss",
+            "lifetime": 600,
+            "servers": [
+              "2001:db8::53"
+            ]
+          }
+        ]
+      }
+    }
+
+=item C<mdns>, C<llmnr>
+
+C<id>, C<flags>, C<response> (boolean), C<questions> (C<name>, C<type>,
+C<type_name>, C<class>, C<unicast_response>) and C<records> (C<section>
+(C<answer>, C<authority> or C<additional>), C<name>, C<type>, C<type_name>,
+C<class>, C<cache_flush>, C<ttl>, plus the fields of the record: C<addr>,
+C<target>, C<priority>, C<weight>, C<port>, C<txt>).
+
+=item C<nbns>
+
+C<id>, C<flags>, C<response>, C<opcode>, C<rcode>, C<questions> (C<name>,
+C<suffix>, C<type>) and C<records> (C<name>, C<suffix>, C<type>, C<ttl>,
+C<entries> with C<group> and C<addr>). C<name_hex> replaces C<name> when the name is
+not valid text.
+
+=item C<ssdp>
+
+C<start> (C<notify>, C<m-search> or C<response>), C<status> (the HTTP status
+for a response, otherwise C<null>) and C<headers>, an array of C<name> and
+C<value> (or C<value_hex>).
+
+=item C<lldp>
+
+C<tlvs>, an array of objects with a C<type> (C<chassis>, C<port>, C<ttl>,
+C<port-descr>, C<sysname>, C<sysdescr>, C<capabilities>, C<mgmt>,
+C<port-vlan>, C<org>) and its members (C<subtype>, C<id>, C<seconds>,
+C<value>, C<system>, C<enabled>, C<addr>, C<vlan>, C<oui>, C<data_hex>).
+
+=item C<cdp>
+
+C<version>, C<ttl> and C<tlvs>: C<device-id>, C<addresses> (C<addrs>),
+C<port-id>, C<capabilities> (C<value>, C<names>), C<software>, C<platform>,
+C<vtp-domain>, C<native-vlan> (C<vlan>), C<duplex> (each with C<value>).
+
+=item C<stp>
+
+C<version>, C<type>, C<flags>, C<topology_change>, C<root>, C<cost>, C<bridge>,
+C<port>, C<message_age_256ths>, C<max_age_256ths>, C<hello_256ths>,
+C<forward_delay_256ths>, and for MSTP C<msti_count>.
+
+    {"schema":1,"type":"packet","ts":1795266131.000000,"time":"2026-11-21T13:02:11.000+00:00","len":60,"src":{"mac":"02:00:5e:10:00:50"},"dst":{"mac":"01:80:c2:00:00:00"},"proto":"stp","stp":{"version":0,"type":0,"flags":0,"topology_change":false,"root":"8000.00:11:22:33:44:01","cost":4,"bridge":"8000.02:00:5e:10:00:50","port":32769,"message_age_256ths":0,"max_age_256ths":5120,"hello_256ths":512,"forward_delay_256ths":3840}}
+
+=item C<other>
+
+Anything else that got through the capture filter, with C<ethertype>; for IP
+traffic C<ip_proto>, C<src_port>, C<dst_port> (TCP and UDP) or C<icmp6_type>
+and C<icmp6_code>; for LLC frames C<llc> (C<dsap>, C<ssap>, C<ctrl>); and
+C<payload_len>.
+
+    {"schema":1,"type":"packet","ts":1795266131.000000,"time":"2026-11-21T13:02:11.000+00:00","len":60,"src":{"mac":"02:00:5e:10:00:05","ip":"10.0.0.5"},"dst":{"mac":"ff:ff:ff:ff:ff:ff","ip":"255.255.255.255"},"proto":"other","other":{"ethertype":2048,"ip_proto":17,"src_port":12345,"dst_port":9,"payload_len":5}}
+
+=back
+
+=head2 Packets with problems
+
+A frame that is damaged still produces a packet object, with the
+C<problems> array. This ARP packet was cut off:
+
+    {"schema":1,"type":"packet","ts":1795266192.500000,"time":"2026-11-21T13:03:12.500+00:00","len":34,"src":{"mac":"02:00:5e:10:00:04"},"dst":{"mac":"ff:ff:ff:ff:ff:ff"},"proto":"other","other":{"ethertype":2054,"payload_len":20},"problems":[{"layer":"arp","reason":"truncated","offset":14,"hex":"000108000604000102005e100004c0a801280000"}]}
+
+A frame too short for Ethernet:
+
+    {"schema":1,"type":"packet","ts":1795266132.250000,"time":"2026-11-21T13:02:12.250+00:00","len":13,"proto":"short","problems":[{"layer":"ethernet","reason":"truncated","offset":0,"hex":"ffffffffffffffffffffffffff"}]}
+
+=head2 Warnings, baselines and the final status
+
+    {"schema":1,"type":"warning","ts":1795266131.500000,"time":"2026-11-21T13:02:11.500+00:00","rule":"second-dhcp-server","severity":"high","segment":"untagged","subject":"192.168.1.254","message":"second DHCP server 192.168.1.254 (expected 192.168.1.1)","macs":["02:00:5e:10:00:fe","02:00:5e:10:00:39"],"addrs":["192.168.1.254"],"count":1}
+
+    {"schema":1,"type":"baseline","ts":1795266131.250000,"time":"2026-11-21T13:02:11.250+00:00","segment":"untagged","what":"dhcp-server","ip":"192.168.1.1"}
+
+    {"schema":1,"type":"baseline","ts":1795266131.250000,"time":"2026-11-21T13:02:11.250+00:00","segment":"untagged","what":"router","ip":"fe80::1","mac":"02:00:5e:10:00:01"}
+
+    {"schema":1,"type":"status","final":true,"packets":11,"kernel_drops":0,"channel_drops":0,"devices":4,"evictions":0}
+
+=head1 WARNINGS
+
+overhear learns what is normal on each network and warns when something differs.
+Every warning is B<high> or B<low> severity. High means that it is very
+likely a problem (a rogue server, a poisoning tool); low means odd and worth a look.
+
+=head2 Segments and baselines
+
+Expectations are kept B<per VLAN segment>: untagged traffic is one segment,
+each VLAN id is another, and a QinQ stack such as outer 200, inner 100
+(written C<200.100>) is its own segment. What a segment learned is announced
+once with a NOTE line (a B<baseline>); in line output a tagged segment is shown
+with its VLAN as C<[100]>.
+
+Learned state is kept for at most 256 segments. When a 257th segment appears
+the segment that was used least recently is forgotten and learns again later,
+so B<whoever speaks first there is trusted again>. A VLAN-hopping or VLAN-flooding
+attacker can use that, so pin the servers you care about.
+
+=head2 Pinning expected servers
+
+B<--dhcp-server> I<IP>[@I<VLAN>] and B<--router> I<MAC|IPV6>[@I<VLAN>] tell
+overhear what to expect. A segment with at least one pin of its own kind is
+never learned: only what you pinned is expected. A pin without B<@>I<VLAN>
+applies to every segment, a pin with B<@>I<VLAN> to that segment only. Pinned
+routers, and the senders of replies from pinned DHCP servers, are never evicted
+from the device table.
+
+=head2 Rules
+
+=over 4
+
+=item B<second-dhcp-server> (high)
+
+A DHCP OFFER, ACK or NAK carries a server identifier that is not the expected
+one. The first server a segment hears is learned (unless you pinned one); after
+that, any other server warns:
+
+    second DHCP server 192.168.1.254 (expected 192.168.1.1)
+
+When several servers are pinned they are listed: C<expected 10.0.0.1, 10.0.0.2>.
+A router option in a reply from an expected server is remembered as a gateway, so
+that an address conflict with it is high severity.
+
+=item B<unexpected-router> (high or low)
+
+An IPv6 router advertisement. A sender with a router lifetime above zero is a
+default router: the first one on a segment is learned, as C<expected router
+fe80::1 (02:00:5e:10:00:01) (learned)>. A learned router must match on both its MAC
+address and its source address, so that a rogue copying only one of them still
+warns; a pinned router matches on either. Any other default router warns (high):
+
+    unexpected router fe80::3 (02:00:5e:10:00:03) advertising a default route
+
+A sender with lifetime B<zero> is not a default router and is quiet, unless it
+advertises DNS servers or a global prefix, which is warned about (low) as one of
+
+    router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers
+    router advert from fe80::2 (02:00:5e:10:00:02) carries a global prefix
+    router advert from fe80::2 (02:00:5e:10:00:02) carries DNS servers and a global prefix
+
+Neighbour discovery packets (including router advertisements) whose IPv6
+hop limit is not 255 cannot have come from the local link. They are shown, with a
+problem noted, and the sender counts as heard, but nothing else is learned from
+them and they never cause a warning.
+
+=item B<address-conflict> (low, or high)
+
+An IP address (from an ARP request, reply or announcement, or an IPv6 neighbour
+advertisement) is claimed by a different MAC address than before. ARP probes
+(sender address 0.0.0.0) are not claims. The warning is high when the address is an expected DHCP server, a gateway
+named by one, or an expected router; low otherwise, since a changed address is
+often a harmless move or a DHCP lease handed on.
+
+    192.168.1.50 now claimed by 02:00:5e:10:00:0b, was 02:00:5e:10:00:0a 1m ago
+
+The age is shown in seconds, minutes or hours.
+
+=item B<suspicious-name-answers> (low or high)
+
+For LLMNR, NetBIOS and mDNS unique records. Two kinds:
+
+(low) One name answered by two different devices with different answers within
+five minutes:
+
+    name FILESERVER<20> answered by 02:00:5e:10:00:41 and 02:00:5e:10:00:40
+
+(high) One device answering LLMNR or NetBIOS queries for three different names
+within five minutes, the pattern of tools such as Responder:
+
+    02:00:5e:10:00:66 answers LLMNR queries for many names (wpad, fileserver, printer): the pattern of poisoning tools such as Responder
+
+=item B<capture-drops> (low)
+
+Frames were dropped by the kernel or by overhear itself:
+
+    N frames dropped (K by the kernel, C by overhear)
+
+=item B<memory-eviction> (low)
+
+The memory budget was reached and the least recently heard devices were
+dropped. A flood of fake MAC addresses causes this:
+
+    device table full, dropping least recently heard devices: possible MAC flood
+
+=back
+
+=head2 Repeats
+
+The first occurrence of a warning is shown at once. Further occurrences of the
+same rule, severity, segment and subject are counted, and summarised at most once
+a minute, with the count:
+
+    ... (repeated 12 times in the last minute)
+
+and the summary is also written when the run ends. A subject that stays quiet for
+ten minutes is forgotten. At most 4096 distinct subjects are kept; beyond that the
+one that has been quiet longest is replaced.
+
+=head1 WHAT A PASSIVE LISTENER CAN SEE
+
+overhear sees what the network delivers to the port it listens on.
+
+On a B<switch>, broadcast and multicast traffic reaches every port, so
+DHCP discovers and offers, ARP requests, router advertisements, mDNS, SSDP, LLMNR,
+NetBIOS announcements, LLDP, CDP and spanning tree are all visible from an ordinary port.
+
+B<Unicast> traffic between two other devices is not: a switch sends it only to the
+port of the destination. Typical consequences are:
+
+=over 4
+
+=item *
+
+DHCP ACKs and NAKs and ARP replies to a client elsewhere are not seen,
+only the broadcast ones (DISCOVER, REQUEST, and OFFERs sent as broadcast).
+
+=item *
+
+A device that never speaks in broadcast is not seen at all.
+
+=back
+
+You see unicast replies only if
+
+=over 4
+
+=item *
+
+the port is a B<mirror> (SPAN) port, or a tap, or you are connected through a
+hub, so that you receive a copy of other ports' traffic;
+
+=item *
+
+the replies are addressed to you; or
+
+=item *
+
+you cause them with your own queries (for example by running another
+program that makes requests). overhear does not do this itself.
+
+=back
+
+For a thorough survey, listen from a mirror port. On a mirror port take care that
+the mirror may be oversubscribed (the kernel's drop counter then rises; see
+the C<capture-drops> warning). VLAN tags are seen only if the port delivers
+them tagged (a trunk or a mirror); an access port delivers them untagged and
+the VLAN is then not visible.
+
+=head1 NAME LOOKUPS
+
+overhear itself never sends anything and never resolves names. The capture
+filter words you give on the command line are compiled by libpcap, and libpcap
+resolves host names and service names in them by the system's resolver. That
+resolver may send DNS queries.
+
+If you need strict silence, write the filter with numeric addresses and
+port numbers only:
+
+    overhear -i eth0 host 192.168.1.1 and udp port 67
+
+and not C<host router.example>.
+
+=head1 PRIVILEGES
+
+Capturing needs privilege, which overhear gives up as soon as the capture is
+open, before any packet is decoded.
+
+=over 4
+
+=item B<Started as root>
+
+overhear switches to the user given with B<-Z> (default C<nobody>): it sets the group,
+the supplementary groups and the user id, checks that it can not become root
+again, clears all capabilities and sets C<no_new_privs>. If the user does not exist, or any
+step fails, overhear exits with an error instead of running with more
+privilege than intended.
+
+=item B<Started by an ordinary user with file capabilities>
+
+For example after
+
+    sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/overhear
+
+overhear clears all capability sets (permitted, effective, inheritable and
+ambient) and sets C<no_new_privs>. B<-Z> is ignored, with a note on standard error.
+
+=back
+
+=head1 MEMORY
+
+B<--max-memory> bounds the state that overhear tracks: the device table
+(addresses, names, services and so on per device) and what the warning rules
+remember. When the device table reaches the budget the least recently heard devices
+are dropped, with a C<memory-eviction> warning.
+
+The cap is B<approximate>. It does not include the packet buffers, the program
+itself or what the libraries use, so the resident set size is the budget plus a
+fixed overhead. The flood test in the source tree (a million frames from
+different MAC addresses) checks that with the default of 64M the process stays
+below 112 MiB.
+
+=head1 KEYS
+
+In the B<-t> view:
+
+    q            quit (also Ctrl-C)
+    Up, Down     move the selection (scroll the warnings when they have focus)
+    PageUp, PageDown, Home, End
+    Enter        details of the selected device (Esc to go back)
+    s            change the sort order (heard, mac, ip, name, vendor, packets)
+    /            filter the table; Enter or Esc to finish
+    w            move the focus to the warnings list and back
+    p            pause the table
+
+=head1 EXIT STATUS
+
+=over 4
+
+=item B<0>
+
+The run ended normally: the end of the capture file or of standard input, B<q> in
+the full-screen view, SIGINT (Ctrl-C) or SIGTERM (the frames already captured are
+shown first), the reader of a pipe went away, or B<--help>, B<--version> or B<-D> succeeded.
+
+=item B<1>
+
+Anything else: a bad command line, options that cannot be combined, an
+interface or file that cannot be opened, a capture filter that does not compile,
+a link type other than Ethernet, a user that does not exist, a failure to drop
+privileges, a truncated capture file (after what could be read was shown), or a
+failure while capturing or writing.
+
+=back
+
+A second Ctrl-C (or SIGTERM) while the first is still being handled
+stops overhear at once.
+
+=head1 EXAMPLES
+
+Watch the LAN on eth0 as one line per packet (as root; overhear switches to nobody):
+
+    sudo overhear -i eth0
+
+The same as an ordinary user, after C<setcap>:
+
+    overhear -i eth0
+
+Full-screen:
+
+    overhear -t -i eth0
+
+JSON for a program, with the warnings:
+
+    overhear -j -i eth0 | jq -c 'select(.type=="warning")'
+
+Read a recording, and show only what concerns one host:
+
+    overhear -r capture.pcap host 192.168.1.1
+
+A recording from tcpdump, read from a pipe:
+
+    tcpdump -i eth0 -w - -s 0 | overhear -r -
+
+Expect one DHCP server on all VLANs, and a different one on VLAN 20:
+
+    overhear -i eth0 --dhcp-server 192.168.1.1 --dhcp-server 10.20.0.1@20
+
+Expect one IPv6 router, by MAC address:
+
+    overhear -i eth0 --router 02:00:5e:10:00:01
+
+Keep memory small on a Raspberry Pi:
+
+    overhear -t -i eth0 --max-memory 16M
+
+=head1 SEE ALSO
+
+pcap-filter(7), tcpdump(8), capabilities(7)
+
+=head1 AUTHOR
+
+Don Steele
+
+=cut

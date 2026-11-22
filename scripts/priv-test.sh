@@ -2,7 +2,7 @@
 # Checks the privilege drop on a real capture of `lo`. Needs passwordless sudo.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-cargo build --release -q || exit 1
+[ "${SKIP_BUILD:-0}" = 1 ] || cargo build --release -q || exit 1
 BIN=$PWD/target/release/overhear
 
 fails=0

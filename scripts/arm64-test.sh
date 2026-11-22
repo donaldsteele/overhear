@@ -3,8 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 IMG=overhear-bookworm
 BIN=target/bookworm/aarch64-unknown-linux-gnu/debug/overhear
-docker image inspect "$IMG" >/dev/null 2>&1 \
-  || docker build -t "$IMG" -f packaging/Dockerfile.bookworm packaging
+# Always run docker build: cached layers make it quick, and it picks up Dockerfile changes.
+docker build -q -t "$IMG" -f packaging/Dockerfile.bookworm packaging >/dev/null
 run_in() {
   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work -w /work \
     -e CARGO_HOME=/work/.cache/cargo-bookworm -e CARGO_TARGET_DIR=/work/target/bookworm \

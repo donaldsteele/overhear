@@ -22,3 +22,14 @@ caps = { workspace = true }
 [dev-dependencies]
 overhear-testgen = { workspace = true }
 serde_json = { workspace = true }
+
+[package.metadata.deb]
+maintainer = "Don Steele"
+depends = "libpcap0.8 (>= 1.10), $auto"
+section = "net"
+priority = "optional"
+assets = [
+  ["target/release/overhear", "usr/bin/", "755"],
+  ["../../dist/man/overhear.1.gz", "usr/share/man/man1/", "644"],
+  ["../../README.md", "usr/share/doc/overhear/", "644"],
+]
