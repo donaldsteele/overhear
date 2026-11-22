@@ -5,7 +5,7 @@ use std::path::Path;
 use pcap::{Activated, Active, Capture, Error, Linktype, Offline};
 
 use super::PlatformError;
-use crate::source::{Frame, LinkType, Next, Source, SourceError, SourceStats};
+use crate::source::{Frame, LinkType, Next, Source, SourceError, SourceStats, Waker};
 
 const SNAPLEN: i32 = 65535;
 const TIMEOUT_MS: i32 = 100;
@@ -83,6 +83,13 @@ impl<T: Activated + ?Sized> Source for PcapSource<T> {
             kernel_drops: u64::from(s.dropped),
             iface_drops: u64::from(s.if_dropped),
         })
+    }
+
+    fn waker(&mut self) -> Option<Waker> {
+        // pcap_breakloop: the blocked read returns PCAP_ERROR_BREAK, which
+        // arrives here as NoMorePackets, so `End`.
+        let h = self.cap.breakloop_handle();
+        Some(Box::new(move || h.breakloop()))
     }
 }
 

@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use jiff::tz::TimeZone;
 use overhear_decode::{Decoded, Frag, IpHeader, Mac, Packet, Problem};
 
-use super::{Renderer, Summary, vlan_kind};
+use super::{Renderer, Status, Summary, vlan_kind};
 use crate::json::JsonWriter;
 use crate::proto;
 use crate::source::Frame;
@@ -16,6 +16,7 @@ pub struct JsonRenderer<W: Write> {
     tz: TimeZone,
     hex: bool,
     w: JsonWriter,
+    flush_each: bool,
 }
 
 impl<W: Write> JsonRenderer<W> {
@@ -25,7 +26,15 @@ impl<W: Write> JsonRenderer<W> {
             tz,
             hex,
             w: JsonWriter::new(),
+            flush_each: false,
         }
+    }
+
+    /// Flush the writer after every line, so output reaches a terminal or pipe
+    /// at once.
+    pub fn flush_each(mut self, on: bool) -> Self {
+        self.flush_each = on;
+        self
     }
 
     pub fn into_inner(self) -> W {
@@ -34,7 +43,11 @@ impl<W: Write> JsonRenderer<W> {
 
     fn emit(&mut self) -> io::Result<()> {
         self.out.write_all(self.w.as_str().as_bytes())?;
-        self.out.write_all(b"\n")
+        self.out.write_all(b"\n")?;
+        if self.flush_each {
+            self.out.flush()?;
+        }
+        Ok(())
     }
 }
 
@@ -117,6 +130,21 @@ impl<W: Write> Renderer for JsonRenderer<W> {
         self.emit()
     }
 
+    fn status(&mut self, s: &Status) -> io::Result<()> {
+        let w = &mut self.w;
+        w.clear();
+        w.obj(None);
+        w.u64(Some("schema"), 1);
+        w.str(Some("type"), "status");
+        w.bool(Some("final"), false);
+        w.i64(Some("ts"), s.ts);
+        w.u64(Some("kernel_drops"), s.kernel_drops);
+        w.u64(Some("channel_drops"), s.channel_drops);
+        w.u64(Some("evictions"), s.evictions);
+        w.end();
+        self.emit()
+    }
+
     fn finish(&mut self, s: &Summary) -> io::Result<()> {
         let w = &mut self.w;
         w.clear();
@@ -135,5 +163,27 @@ impl<W: Write> Renderer for JsonRenderer<W> {
         w.end();
         self.emit()?;
         self.out.flush()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_line() {
+        let mut r = JsonRenderer::new(Vec::new(), TimeZone::UTC, false);
+        r.status(&Status {
+            ts: 1_700_000_000,
+            kernel_drops: 3,
+            channel_drops: 2,
+            evictions: 0,
+        })
+        .expect("status");
+        assert_eq!(
+            String::from_utf8(r.into_inner()).expect("utf8"),
+            "{\"schema\":1,\"type\":\"status\",\"final\":false,\"ts\":1700000000,\
+             \"kernel_drops\":3,\"channel_drops\":2,\"evictions\":0}\n"
+        );
     }
 }

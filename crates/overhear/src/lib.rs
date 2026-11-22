@@ -4,6 +4,7 @@ pub mod escape;
 pub mod file_source;
 pub mod filter;
 pub mod json;
+pub mod pipeline;
 pub mod platform;
 pub mod proto;
 pub mod render;

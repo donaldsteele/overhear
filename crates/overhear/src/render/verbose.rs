@@ -15,6 +15,7 @@ pub struct VerboseRenderer<W: Write> {
     out: W,
     opts: TextOpts,
     buf: String,
+    flush_each: bool,
 }
 
 impl<W: Write> VerboseRenderer<W> {
@@ -23,7 +24,15 @@ impl<W: Write> VerboseRenderer<W> {
             out,
             opts,
             buf: String::new(),
+            flush_each: false,
         }
+    }
+
+    /// Flush the writer after every packet, so output reaches a terminal or
+    /// pipe at once.
+    pub fn flush_each(mut self, on: bool) -> Self {
+        self.flush_each = on;
+        self
     }
 
     pub fn into_inner(self) -> W {
@@ -35,7 +44,11 @@ impl<W: Write> Renderer for VerboseRenderer<W> {
     fn packet(&mut self, frame: &Frame, decoded: &Decoded<'_>) -> io::Result<()> {
         self.buf.clear();
         format_block(frame, decoded, &self.opts, &mut self.buf);
-        self.out.write_all(self.buf.as_bytes())
+        self.out.write_all(self.buf.as_bytes())?;
+        if self.flush_each {
+            self.out.flush()?;
+        }
+        Ok(())
     }
 
     fn finish(&mut self, _summary: &Summary) -> io::Result<()> {

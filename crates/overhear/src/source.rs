@@ -55,10 +55,20 @@ impl fmt::Display for SourceError {
 
 impl std::error::Error for SourceError {}
 
+/// Called from another thread to make a blocked [`Source::next_into`] return.
+pub type Waker = Box<dyn Fn() + Send + Sync>;
+
 pub trait Source: Send {
     fn link_type(&self) -> LinkType;
     /// Clears and refills `frame.data` (keeping its allocation) and sets the
     /// timestamp and original length.
     fn next_into(&mut self, frame: &mut Frame) -> Result<Next, SourceError>;
     fn stats(&mut self) -> Option<SourceStats>;
+    /// A way to cut short a `next_into` blocked on another thread; the read
+    /// then returns soon, usually with `End`. `None` when reads never block
+    /// for long. Needed because a read timeout is not enough: libpcap on
+    /// Linux waits for the next packet however long that takes.
+    fn waker(&mut self) -> Option<Waker> {
+        None
+    }
 }

@@ -1,10 +1,13 @@
 use std::io::{self, BufWriter, Write};
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use jiff::tz::TimeZone;
 use overhear::cli::{Mode, parse_args};
-use overhear::engine::{Config, Engine, RunEnd, run_source};
+use overhear::engine::{Config, Engine, RunEnd};
 use overhear::filter::build_filter;
+use overhear::pipeline::{self, Flow, PipelineOpts, run_threaded};
 use overhear::platform;
 use overhear::render::json::JsonRenderer;
 use overhear::render::line::LineRenderer;
@@ -13,29 +16,14 @@ use overhear::render::{Renderer, TextOpts};
 use overhear::source::LinkType;
 use overhear::time::TimeStyle;
 
-/// Standard output through a buffer that is flushed at the end of every line
-/// when packets should show up at once (a terminal or a pipe).
-struct Out {
-    w: BufWriter<io::Stdout>,
-    flush_lines: bool,
-}
-
-impl Write for Out {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = self.w.write(buf)?;
-        if self.flush_lines && n == buf.len() && buf.ends_with(b"\n") {
-            self.w.flush()?;
-        }
-        Ok(n)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.w.flush()
-    }
+/// Writes `overhear: {msg}` to stderr. A closed stderr is ignored: there is
+/// nowhere left to complain.
+fn complain(msg: impl std::fmt::Display) {
+    let _ = writeln!(io::stderr(), "overhear: {msg}");
 }
 
 fn fail(msg: impl std::fmt::Display) -> ExitCode {
-    eprintln!("overhear: {msg}");
+    complain(msg);
     ExitCode::from(1)
 }
 
@@ -71,7 +59,7 @@ fn main() -> ExitCode {
             None => platform::open_live(None, !args.no_promisc, &filter),
         },
     };
-    let mut src = match opened {
+    let src = match opened {
         Ok(s) => s,
         Err(e) => return fail(e),
     };
@@ -95,39 +83,58 @@ fn main() -> ExitCode {
         hex: args.hex,
     };
     let mut engine = Engine::new(Config { text: text.clone() });
-    let out = Out {
-        w: BufWriter::new(io::stdout()),
-        flush_lines: !platform::stdout_is_file(),
-    };
+    // Packets must reach a terminal or pipe at once; a regular file can wait.
+    let out = BufWriter::new(io::stdout());
+    let flush = !platform::stdout_is_file();
     let mut renderer: Box<dyn Renderer> = match mode {
-        Mode::Line => Box::new(LineRenderer::new(out, text)),
-        Mode::Verbose => Box::new(VerboseRenderer::new(out, text)),
-        Mode::Json => Box::new(JsonRenderer::new(out, text.tz, args.hex)),
+        Mode::Line => Box::new(LineRenderer::new(out, text).flush_each(flush)),
+        Mode::Verbose => Box::new(VerboseRenderer::new(out, text).flush_each(flush)),
+        Mode::Json => Box::new(JsonRenderer::new(out, text.tz, args.hex).flush_each(flush)),
         Mode::Tui => return fail("-t is not available yet"),
     };
 
-    match run_source(&mut *src, &mut engine, &mut *renderer) {
+    // SIGINT and SIGTERM end the run normally, after the frames already
+    // captured are shown.
+    let stop = Arc::new(AtomicBool::new(false));
+    let handler_stop = Arc::clone(&stop);
+    if let Err(e) = ctrlc::set_handler(move || handler_stop.store(true, Ordering::SeqCst)) {
+        return fail(format!("cannot handle signals: {e}"));
+    }
+
+    let opts = PipelineOpts {
+        buffers: pipeline::BUFFERS,
+        linger_after_end: false,
+        wall_clock: live,
+    };
+    let mut keep_going = |_: &mut Engine, _: &mut dyn Renderer| Ok(Flow::Continue);
+    match run_threaded(
+        src,
+        &mut engine,
+        &mut *renderer,
+        stop,
+        opts,
+        &mut keep_going,
+    ) {
         Ok(RunEnd::Done) => {
-            let mut summary = engine.summary();
-            if let Some(st) = src.stats() {
-                summary.kernel_drops = st.kernel_drops;
-            }
+            let summary = engine.summary();
             match renderer.finish(&summary) {
                 Ok(()) => {}
                 Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
                 Err(e) => return fail(e),
             }
             if matches!(mode, Mode::Line | Mode::Verbose) {
-                eprintln!(
-                    "overhear: {} packets, {} dropped by the kernel, {} dropped by overhear, {} devices",
+                complain(format_args!(
+                    "{} packets, {} dropped by the kernel, {} dropped by overhear, {} devices",
                     summary.packets, summary.kernel_drops, summary.channel_drops, summary.devices
-                );
+                ));
             }
             ExitCode::SUCCESS
         }
         Ok(RunEnd::Closed) => ExitCode::SUCCESS,
         Ok(RunEnd::Truncated(_)) => {
-            let _ = renderer.finish(&engine.summary());
+            // No finish: a final JSON status would claim the run completed.
+            // Dropping the renderer writes out what is still buffered.
+            drop(renderer);
             let path = args
                 .read
                 .as_deref()
@@ -135,6 +142,9 @@ fn main() -> ExitCode {
                 .unwrap_or_default();
             fail(format!("{path}: truncated capture file"))
         }
-        Err(e) => fail(e),
+        Err(e) => {
+            drop(renderer);
+            fail(e)
+        }
     }
 }
